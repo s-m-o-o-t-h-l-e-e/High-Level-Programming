@@ -1,0 +1,9 @@
+.DS_Store
+__pycache__/
+*.pyc
+.env
+backend/outputs/matplotlib_cache/
+backend/api/__pycache__/
+backend/__pycache__/
+backend/scripts/__pycache__/
+*.part
