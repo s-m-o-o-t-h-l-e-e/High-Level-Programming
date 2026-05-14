@@ -377,7 +377,7 @@ def build_hwpx_placeholder(pdf_path: Path) -> Path:
     <document>
       <title>국내 유가 예측 모델 분석 보고서</title>
       <note>정식 PDF 보고서는 같은 폴더의 국내 유가 예측 모델 분석 보고서.pdf 파일을 확인하세요.</note>
-      <source>evalutation/backend 분석 결과 기반 자동 생성</source>
+      <source>backend 분석 결과 기반 자동 생성</source>
     </document>
     """.strip()
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:

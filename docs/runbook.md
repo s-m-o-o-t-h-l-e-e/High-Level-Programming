@@ -3,8 +3,8 @@
 ## 1. 서버 실행
 
 ```bash
-cd "/Users/seungwoolee/Desktop/High-level programming/evalutation"
-python3 backend/server.py
+cd High-Level-Programming
+python3 server.py
 ```
 
 브라우저에서 접속:
@@ -51,7 +51,7 @@ http://127.0.0.1:8000/graphs
 ## 6. 결과 패키지 생성
 
 ```bash
-cd "/Users/seungwoolee/Desktop/High-level programming/evalutation"
+cd High-Level-Programming
 python3 scripts/build_result_package.py
 ```
 
