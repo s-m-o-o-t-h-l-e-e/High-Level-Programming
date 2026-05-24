@@ -1,11 +1,11 @@
 key,value
-downloaded_at,2026-05-02T21:29:55
-calendar_extended_to,2026-05-02
-domestic_trade_date,2026-05-02
-domestic_price,2010.59
+downloaded_at,2026-05-24T21:31:17
+calendar_extended_to,2026-05-24
+domestic_trade_date,2026-05-24
+domestic_price,2011.26
 domestic_source,https://www.opinet.co.kr/api/avgAllPrice.do
 domestic_source_name,OPINET official avgAllPrice API
 domestic_history_source,OPINET Open API current + OPINET official CSV history
-international_oil_source,Alpha Vantage API WTI/BRENT + Investing.com historical tables
-exchange_source,https://fred.stlouisfed.org/graph/fredgraph.csv?id=DEXKOUS
-rows,6592
+international_oil_source,Yahoo Finance CL=F/BZ=F daily + Alpha Vantage API WTI/BRENT + Investing.com unavailable: HTTP Error 403: Forbidden + Yahoo Finance CL=F/BZ=F latest
+exchange_source,Yahoo Finance KRW=X daily + FRED DEXKOUS + Yahoo Finance KRW=X latest
+rows,6614

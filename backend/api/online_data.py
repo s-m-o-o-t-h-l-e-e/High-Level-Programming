@@ -6,7 +6,7 @@ from io import BytesIO
 from io import StringIO
 from datetime import datetime
 from urllib.error import URLError
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 import pandas as pd
@@ -16,6 +16,7 @@ from config import PATHS
 
 FRED_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
 ALPHA_VANTAGE_URL = "https://www.alphavantage.co/query"
+YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 INVESTING_WTI_URL = "https://www.investing.com/commodities/crude-oil-historical-data"
 INVESTING_BRENT_URL = "https://www.investing.com/commodities/brent-oil-historical-data"
 OPINET_AVG_URL = "https://www.opinet.co.kr/api/avgAllPrice.do"
@@ -49,6 +50,78 @@ def _download_fred_series(series_id: str, column_name: str) -> pd.DataFrame:
     df["Date"] = pd.to_datetime(df["Date"])
     df[column_name] = pd.to_numeric(df[column_name].replace(".", pd.NA), errors="coerce")
     return df.set_index("Date")[[column_name]].dropna()
+
+
+def _download_yahoo_chart(symbol: str, output_col: str, range_text: str = "max", interval: str = "1d") -> pd.DataFrame:
+    params = urlencode(
+        {
+            "range": range_text,
+            "interval": interval,
+            "includePrePost": "false",
+            "events": "history",
+        }
+    )
+    url = f"{YAHOO_CHART_URL.format(symbol=quote(symbol, safe=''))}?{params}"
+    payload = json.loads(_fetch_url_text(url))
+    chart = payload.get("chart", {})
+    error = chart.get("error")
+    if error:
+        raise ValueError(f"Yahoo Finance {symbol} 오류: {error}")
+    result = (chart.get("result") or [None])[0]
+    if not result or "timestamp" not in result:
+        raise ValueError(f"Yahoo Finance {symbol} 응답에 timestamp가 없습니다.")
+
+    timestamps = result["timestamp"]
+    quote_data = (result.get("indicators", {}).get("quote") or [{}])[0]
+    closes = quote_data.get("close")
+    if not closes:
+        raise ValueError(f"Yahoo Finance {symbol} 응답에 close 가격이 없습니다.")
+
+    df = pd.DataFrame(
+        {
+            "Date": pd.to_datetime(timestamps, unit="s", utc=True)
+            .tz_convert("Asia/Seoul")
+            .tz_localize(None)
+            .normalize(),
+            output_col: closes,
+        }
+    )
+    df[output_col] = pd.to_numeric(df[output_col], errors="coerce")
+    df = df.dropna().groupby("Date").last().sort_index()
+    df.index.name = "Date"
+    return df[[output_col]]
+
+
+def _download_yahoo_latest(symbol: str, output_col: str) -> pd.DataFrame:
+    params = urlencode({"range": "5d", "interval": "1h", "includePrePost": "false"})
+    url = f"{YAHOO_CHART_URL.format(symbol=quote(symbol, safe=''))}?{params}"
+    payload = json.loads(_fetch_url_text(url))
+    chart = payload.get("chart", {})
+    error = chart.get("error")
+    if error:
+        raise ValueError(f"Yahoo Finance latest {symbol} 오류: {error}")
+    result = (chart.get("result") or [None])[0]
+    if not result:
+        raise ValueError(f"Yahoo Finance latest {symbol} 응답이 비어 있습니다.")
+
+    meta = result.get("meta", {})
+    price = meta.get("regularMarketPrice")
+    market_time = meta.get("regularMarketTime")
+    if price is None:
+        quote_data = (result.get("indicators", {}).get("quote") or [{}])[0]
+        closes = pd.Series(quote_data.get("close", []), dtype="float64").dropna()
+        if closes.empty:
+            raise ValueError(f"Yahoo Finance latest {symbol} 가격이 없습니다.")
+        price = float(closes.iloc[-1])
+        timestamps = result.get("timestamp", [])
+        market_time = timestamps[-1] if timestamps else None
+
+    date = (
+        pd.to_datetime(market_time, unit="s", utc=True).tz_convert("Asia/Seoul").tz_localize(None).normalize()
+        if market_time
+        else TODAY
+    )
+    return pd.DataFrame({output_col: [float(price)]}, index=pd.DatetimeIndex([date], name="Date"))
 
 
 def _normalize_price_frame(df: pd.DataFrame, date_col: str, price_col: str, output_col: str) -> pd.DataFrame:
@@ -129,6 +202,49 @@ def _download_alpha_vantage_oil() -> pd.DataFrame:
     return wti.join(brent, how="outer")
 
 
+def _download_yahoo_oil_history() -> pd.DataFrame:
+    wti = _download_yahoo_chart("CL=F", "wti")
+    brent = _download_yahoo_chart("BZ=F", "brent")
+    return wti.join(brent, how="outer")
+
+
+def _download_yahoo_oil_latest() -> pd.DataFrame:
+    wti = _download_yahoo_latest("CL=F", "wti")
+    brent = _download_yahoo_latest("BZ=F", "brent")
+    return wti.join(brent, how="outer")
+
+
+def download_exchange_rates() -> tuple[pd.DataFrame, str]:
+    source_notes = []
+    exchange = pd.DataFrame()
+
+    try:
+        yahoo = _download_yahoo_chart("KRW=X", "exchange")
+        exchange = yahoo
+        source_notes.append("Yahoo Finance KRW=X daily")
+    except Exception as exc:
+        source_notes.append(f"Yahoo Finance KRW=X history unavailable: {exc}")
+
+    try:
+        fred = _download_fred_series("DEXKOUS", "exchange")
+        exchange = exchange.combine_first(fred) if not exchange.empty else fred
+        source_notes.append("FRED DEXKOUS")
+    except Exception as exc:
+        source_notes.append(f"FRED DEXKOUS unavailable: {exc}")
+
+    try:
+        yahoo_latest = _download_yahoo_latest("KRW=X", "exchange")
+        exchange = exchange.combine_first(yahoo_latest) if not exchange.empty else yahoo_latest
+        exchange.update(yahoo_latest)
+        source_notes.append("Yahoo Finance KRW=X latest")
+    except Exception as exc:
+        source_notes.append(f"Yahoo Finance KRW=X latest unavailable: {exc}")
+
+    if exchange.empty:
+        raise RuntimeError("원/달러 환율 데이터를 가져오지 못했습니다.")
+    return exchange.sort_index(), " + ".join(source_notes)
+
+
 def _read_investing_table(url: str, output_col: str) -> pd.DataFrame:
     text = _fetch_url_text(url)
     tables = pd.read_html(StringIO(text))
@@ -145,8 +261,15 @@ def download_international_oil_prices() -> tuple[pd.DataFrame, str]:
     oil = pd.DataFrame()
 
     try:
+        yahoo = _download_yahoo_oil_history()
+        oil = yahoo
+        source_notes.append("Yahoo Finance CL=F/BZ=F daily")
+    except Exception as exc:
+        source_notes.append(f"Yahoo Finance oil history unavailable: {exc}")
+
+    try:
         alpha = _download_alpha_vantage_oil()
-        oil = alpha
+        oil = oil.combine_first(alpha) if not oil.empty else alpha
         source_notes.append("Alpha Vantage API WTI/BRENT")
     except Exception as exc:
         source_notes.append(f"Alpha Vantage unavailable: {exc}")
@@ -154,7 +277,6 @@ def download_international_oil_prices() -> tuple[pd.DataFrame, str]:
     kaggle = _load_kaggle_oil_csv()
     if kaggle is not None:
         oil = oil.combine_first(kaggle) if not oil.empty else kaggle
-        oil.update(kaggle)
         source_notes.append(f"Kaggle CSV: {os.getenv('KAGGLE_OIL_CSV_PATH')}")
 
     try:
@@ -162,10 +284,17 @@ def download_international_oil_prices() -> tuple[pd.DataFrame, str]:
         brent_recent = _read_investing_table(INVESTING_BRENT_URL, "brent")
         investing = wti_recent.join(brent_recent, how="outer")
         oil = oil.combine_first(investing) if not oil.empty else investing
-        oil.update(investing)
         source_notes.append("Investing.com historical tables")
     except Exception as exc:
         source_notes.append(f"Investing.com unavailable: {exc}")
+
+    try:
+        yahoo_latest = _download_yahoo_oil_latest()
+        oil = oil.combine_first(yahoo_latest) if not oil.empty else yahoo_latest
+        oil.update(yahoo_latest)
+        source_notes.append("Yahoo Finance CL=F/BZ=F latest")
+    except Exception as exc:
+        source_notes.append(f"Yahoo Finance oil latest unavailable: {exc}")
 
     if oil.empty or not {"wti", "brent"}.issubset(oil.columns):
         raise RuntimeError(
@@ -275,14 +404,16 @@ def download_opinet_daily_history(start_date: pd.Timestamp, end_date: pd.Timesta
 
 def download_latest_dataset() -> pd.DataFrame:
     oil_prices, oil_source = download_international_oil_prices()
-    exchange = _download_fred_series("DEXKOUS", "exchange")
+    exchange, exchange_source = download_exchange_rates()
     today_domestic = download_today_domestic_price()
 
     start_date = pd.Timestamp("2008-04-15")
-    history_end = min(TODAY - pd.Timedelta(days=1), today_domestic["date"] - pd.Timedelta(days=1))
+    history_end = TODAY - pd.Timedelta(days=1)
     domestic = download_opinet_daily_history(start_date, history_end)
     if today_domestic["date"] >= domestic.index.max():
         domestic.loc[today_domestic["date"], "domestic_price"] = today_domestic["price"]
+    actual_domestic_date = domestic.index.max()
+    actual_domestic_price = float(domestic.loc[actual_domestic_date, "domestic_price"])
 
     df = domestic.join(oil_prices, how="left").join(exchange, how="left").sort_index()
     daily_index = pd.date_range(df.index.min(), TODAY, freq="D")
@@ -297,13 +428,13 @@ def download_latest_dataset() -> pd.DataFrame:
         [
             {"key": "downloaded_at", "value": datetime.now().isoformat(timespec="seconds")},
             {"key": "calendar_extended_to", "value": TODAY.date().isoformat()},
-            {"key": "domestic_trade_date", "value": today_domestic["date"].date().isoformat()},
-            {"key": "domestic_price", "value": str(today_domestic["price"])},
+            {"key": "domestic_trade_date", "value": actual_domestic_date.date().isoformat()},
+            {"key": "domestic_price", "value": str(actual_domestic_price)},
             {"key": "domestic_source", "value": today_domestic["source"]},
             {"key": "domestic_source_name", "value": today_domestic["source_name"]},
             {"key": "domestic_history_source", "value": "OPINET Open API current + OPINET official CSV history"},
             {"key": "international_oil_source", "value": oil_source},
-            {"key": "exchange_source", "value": FRED_URL.format(series_id="DEXKOUS")},
+            {"key": "exchange_source", "value": exchange_source},
             {"key": "rows", "value": str(len(df))},
         ]
     )
@@ -314,7 +445,7 @@ def download_latest_dataset() -> pd.DataFrame:
 
 def load_latest_online_dataset() -> pd.DataFrame:
     try:
-        print("온라인 데이터 다운로드: WTI/Brent(Kaggle/Investing.com) + Opinet + 원달러 환율")
+        print("온라인 데이터 다운로드: WTI/Brent(Yahoo 실시간 + Alpha/Kaggle) + Opinet + 원달러 환율(Yahoo/FRED)")
         return download_latest_dataset()
     except (URLError, OSError, ValueError) as exc:
         raise RuntimeError(f"온라인 데이터 다운로드에 실패했습니다: {exc}") from exc

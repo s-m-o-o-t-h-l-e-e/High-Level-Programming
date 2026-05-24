@@ -65,23 +65,8 @@ def save_period_trend_graph(raw: pd.DataFrame, forecast: pd.DataFrame, today: pd
     forecast_dates = pd.to_datetime(forecast["date"])
     forecast_prices = forecast["predicted_domestic_price"]
 
-    fig = plt.figure(figsize=(9, 8), facecolor="white")
-    fig.text(0.08, 0.93, "유가추이", fontsize=28, fontweight="bold", color="#333333", ha="left", va="center")
-    fig.add_artist(plt.Line2D([0.08, 0.92], [0.86, 0.86], color="black", linewidth=2, transform=fig.transFigure))
-
-    tab_ax = fig.add_axes([0.08, 0.74, 0.84, 0.08])
-    tab_ax.axis("off")
-    tab_width = 1 / len(PERIODS)
-    for idx, (period_code, period_label, _period_days) in enumerate(PERIODS):
-        x0 = idx * tab_width
-        selected = period_code == code
-        face = "#6b6b6b" if selected else "white"
-        text_color = "white" if selected else "#666666"
-        rect = plt.Rectangle((x0, 0.05), tab_width, 0.82, facecolor=face, edgecolor="#666666", linewidth=1.2)
-        tab_ax.add_patch(rect)
-        tab_ax.text(x0 + tab_width / 2, 0.46, period_label, ha="center", va="center", fontsize=17, color=text_color, fontweight="bold")
-
-    ax = fig.add_axes([0.16, 0.2, 0.74, 0.46])
+    fig = plt.figure(figsize=(9, 6), facecolor="white")
+    ax = fig.add_axes([0.12, 0.22, 0.82, 0.68])
     ax.plot(history.index, history["domestic_price"], color="#5f8ffb", marker="o", markersize=3, linewidth=2.2, label="국내 유가")
     ax.plot([today] + list(forecast_dates), [today_price] + list(forecast_prices), color="#f2a900", marker="o", markersize=4, linewidth=2.4, label="7일 예측")
     ax.axvline(today, color="#777777", linestyle="--", linewidth=1, alpha=0.7)
