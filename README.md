@@ -15,13 +15,14 @@
 ## Structure
 
 ```text
+server.py                  FastAPI 로컬 서버 실행 파일
+oil_price_project.py       CLI 방식 분석/예측 실행 진입점
 backend/                  FastAPI 로컬 서버와 유가 예측 파이프라인
 backend/api/              데이터 수집, 전처리, EDA, 모델링, 예측 API
+backend/web/              웹 화면 HTML, CSS, JavaScript
 backend/models/           학습된 LSTM 모델과 스케일러
 backend/outputs/          최신 CSV, 예측표, 그래프 산출물
 docs/                     서비스 정의, 데이터 출처, 실행 가이드
-scripts/                  결과 패키지 생성 스크립트
-shared/contracts/         API 응답 예시와 데이터 계약 문서
 ```
 
 ## Main Features
@@ -30,46 +31,105 @@ shared/contracts/         API 응답 예시와 데이터 계약 문서
 - WTI, Brent, 원/달러 환율, 뉴스 리스크 결합
 - LSTM 기반 향후 7일 국내 유가 예측
 - 과도한 예측 급등락을 줄이는 안정화 로직
-- 현재 상황 가설 기반 변화 이유 자동 생성
-- FastAPI 기반 로컬 웹 대시보드
-- `/docs` 커스텀 실행 UI
+- 실제 뉴스 제목, 환율, 국제유가를 엮은 변화 이유 자동 생성
+- FastAPI 기반 로컬 홈 대시보드
+- `/docs` 커스텀 API 실행 문서
 - 전체 그래프 갤러리와 JSON API 제공
+- 최신화 직후 예측값이 계속 흔들리지 않도록 10분 캐시 적용
 
 ## Quick Start
 
 ```bash
-cd High-Level-Programming
+cd "term project"
 python3 server.py
 ```
 
 브라우저에서 아래 주소로 접속합니다.
 
 ```text
+http://127.0.0.1:8000
+```
+
+포트가 이미 사용 중이면 원하는 포트로 직접 실행합니다.
+
+```bash
+uvicorn backend.api.app:app --host 127.0.0.1 --port 8001
+```
+
+이 경우 브라우저 주소는 다음과 같습니다.
+
+```text
 http://127.0.0.1:8001
 ```
 
-커스텀 실행 UI는 아래 주소에서 확인합니다.
+## Web Pages
 
-```text
-http://127.0.0.1:8001/docs
-```
-
-포트가 이미 사용 중이면 다음처럼 다른 포트로 실행합니다.
-
-```bash
-uvicorn backend.api.app:app --host 127.0.0.1 --port 8002
-```
+| Path | 화면 |
+| --- | --- |
+| `/` | 홈 대시보드: 오늘 유가, 핵심 지표, 7일 예측, 그래프 미리보기 |
+| `/home` | 홈 대시보드 별칭 |
+| `/docs` | API를 버튼으로 실행하는 커스텀 실행 문서 |
+| `/graphs` | 전체 분석 그래프 갤러리 |
+| `/graphs/{filename}` | 개별 그래프 상세 보기 |
 
 ## Main API
 
 | Method | Path | Description |
 | --- | --- | --- |
-| GET | `/` | 웹 분석 대시보드 |
 | GET | `/summary` | 최신 유가, 예측, 뉴스 리스크 요약 |
 | GET | `/forecast` | 향후 7일 예측표 |
-| GET | `/graphs` | 전체 그래프 갤러리 |
 | GET | `/graphs/list` | 그래프 목록 JSON |
 | POST | `/refresh` | 최신 데이터 수집, EDA, 예측 재실행 |
+| POST | `/agent` | 질문 기반 간단 분석 응답 |
+| GET | `/health` | 서버 상태 확인 |
+
+## CLI Usage
+
+웹 없이 CSV/그래프를 직접 생성하고 싶으면 아래처럼 실행합니다.
+
+```bash
+cd "term project"
+python3 oil_price_project.py --mode forecast --device auto --no-gui
+```
+
+전체 파이프라인을 다시 돌릴 때는 다음 명령을 사용합니다.
+
+```bash
+python3 oil_price_project.py --mode all --epochs 30 --device auto --no-gui
+```
+
+사용 가능한 모드:
+
+| Mode | 역할 |
+| --- | --- |
+| `preprocess` | 온라인 데이터 수집 및 전처리 |
+| `eda` | EDA/그래프 생성 |
+| `train` | LSTM 모델 학습 |
+| `forecast` | 최신 데이터 수집 후 7일 예측 |
+| `all` | 전처리, EDA, 학습, 예측 전체 실행 |
+
+## Key Outputs
+
+| File | 내용 |
+| --- | --- |
+| `backend/outputs/raw_oil_project.csv` | 원본 분석 데이터 |
+| `backend/outputs/processed_oil_project.csv` | 모델 입력용 전처리 데이터 |
+| `backend/outputs/seven_day_forecast.csv` | 향후 7일 예측표 |
+| `backend/outputs/news_articles.csv` | 뉴스 수집 결과 |
+| `backend/outputs/news_signal.csv` | 뉴스 리스크 점수 |
+| `backend/outputs/model_metrics.csv` | 모델 평가 결과 |
+| `backend/models/oil_project_lstm.keras` | 학습된 LSTM 모델 |
+| `backend/models/oil_project_scaler.pkl` | 스케일러 |
+
+## Endpoint Summary
+
+| Method | Path | Output |
+| --- | --- | --- |
+| GET | `/summary` | 최신 유가, 예측, 뉴스 리스크 요약 |
+| GET | `/forecast` | 향후 7일 예측표 |
+| GET | `/graphs/list` | 그래프 목록 JSON |
+| POST | `/refresh` | 최신 데이터 수집, EDA, 예측 재실행 |
+| POST | `/agent` | 질문과 요약 근거 |
 
 ## Forecast Logic
 
@@ -109,23 +169,8 @@ uvicorn backend.api.app:app --host 127.0.0.1 --port 8002
 
 자세한 내용은 [데이터 출처 문서](docs/data-sources.md)를 참고하세요.
 
-## Result Package
-
-발표/제출용 결과 패키지는 다음 명령으로 다시 만들 수 있습니다.
-
-```bash
-python3 scripts/build_result_package.py
-```
-
-생성 위치:
-
-```text
-~/Desktop/result/
-```
-
 ## Documents
 
 - [서비스 정의서](docs/service-definition.md)
 - [데이터 출처 및 수집 방식](docs/data-sources.md)
 - [실행 가이드](docs/runbook.md)
-- [API 계약 문서](shared/contracts/README.md)

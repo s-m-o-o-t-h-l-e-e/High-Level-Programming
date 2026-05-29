@@ -31,19 +31,6 @@ http://127.0.0.1:8000/graphs
 
 주의: 네트워크 요청과 모델 예측이 포함되어 시간이 걸릴 수 있습니다.
 
-## 5. 결과 패키지 생성
-
-```bash
-cd High-Level-Programming
-python3 scripts/build_result_package.py
-```
-
-결과는 바탕화면에 생성됩니다.
-
-```text
-~/Desktop/result
-```
-
 ## 문제 해결
 
 ### Address already in use

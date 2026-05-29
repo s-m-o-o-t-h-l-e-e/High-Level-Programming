@@ -4,6 +4,8 @@ from pathlib import Path
 
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 os.environ.setdefault("TF_METAL_LOGGING", "0")
+os.environ.setdefault("PYTHONHASHSEED", "42")
+os.environ.setdefault("TF_DETERMINISTIC_OPS", "1")
 BASE_DIR = Path(__file__).resolve().parents[1]
 OUT_DIR = BASE_DIR / "outputs"
 MODEL_DIR = BASE_DIR / "models"
@@ -26,6 +28,7 @@ class Paths:
     event_windows: Path = OUT_DIR / "event_window_summary.csv"
     metrics: Path = OUT_DIR / "model_metrics.csv"
     figures: Path = OUT_DIR / "figures"
+    refresh_state: Path = OUT_DIR / "refresh_state.csv"
 
 
 PATHS = Paths()

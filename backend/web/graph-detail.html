@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{title}}</title>
+  <link rel="stylesheet" href="/web/styles.css" />
+</head>
+<body>
+  <main class="page">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">{{filename}}</div>
+        <h1>{{title}}</h1>
+      </div>
+      <nav>
+        <a class="link-button" href="/graphs">전체 그래프</a>
+        <a class="link-button" href="{{url}}">원본 PNG</a>
+        <a class="link-button" href="/docs">API Docs</a>
+      </nav>
+    </header>
+    <article class="panel">
+      <div class="chart-frame">
+        <img src="{{url}}" alt="{{title}}" />
+      </div>
+    </article>
+  </main>
+</body>
+</html>

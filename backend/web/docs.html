@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>유가 분석 API Docs</title>
+  <link rel="stylesheet" href="/web/styles.css" />
+</head>
+<body>
+  <div class="docs-layout">
+    <aside class="docs-sidebar">
+      <h2>유가 분석 API</h2>
+      <p class="hero-copy">필요한 API를 선택하고 바로 실행 결과를 확인합니다.</p>
+      <nav class="quick-actions" style="grid-template-columns:1fr 1fr;margin:16px 0;">
+        <a class="action" href="/">홈</a>
+        <a class="action" href="/graphs">그래프</a>
+        <a class="action" href="/openapi.json">OpenAPI</a>
+        <a class="action" href="/summary">JSON</a>
+      </nav>
+      <div class="endpoint-list" id="endpointList"></div>
+    </aside>
+
+    <main class="docs-main">
+      <div class="topbar">
+        <div>
+          <div class="eyebrow">API Console</div>
+          <h1>유가 분석 실행 문서</h1>
+          <p class="hero-copy">국내 유가, 국제 유가, 환율, 뉴스 리스크 분석 API를 간단하게 확인합니다.</p>
+        </div>
+        <span class="badge" id="statusPill">대기 중</span>
+      </div>
+
+      <section class="workspace">
+        <article class="panel">
+          <div class="panel-head">
+            <h3 id="endpointTitle">API 선택</h3>
+          </div>
+          <div class="detail">
+            <p id="endpointDesc">왼쪽 목록에서 실행할 API를 선택하세요.</p>
+            <div class="row"><span>Method</span><strong id="endpointMethod">-</strong></div>
+            <div class="row"><span>Path</span><code id="endpointPath">-</code></div>
+            <div class="row"><span>Output</span><strong id="endpointOutput">-</strong></div>
+            <div class="row"><span>Note</span><strong id="endpointNote">-</strong></div>
+          </div>
+          <div class="actions">
+            <button class="run" id="runButton">실행</button>
+            <a class="ghost" id="openButton" href="#">새 창으로 열기</a>
+          </div>
+        </article>
+
+        <article class="panel result">
+          <div class="panel-head">
+            <div>
+              <h3>실행 결과</h3>
+              <p id="resultTitle">결과가 여기에 표시됩니다.</p>
+            </div>
+            <span id="resultStatus">Ready</span>
+          </div>
+          <pre id="output">왼쪽에서 API를 선택한 뒤 실행 버튼을 누르세요.</pre>
+        </article>
+      </section>
+    </main>
+  </div>
+  <script src="/web/docs.js"></script>
+</body>
+</html>

@@ -20,6 +20,7 @@ LSTM_BLEND_WEIGHT = 0.35
 MAX_NEWS_ADJUSTMENT_PCT = 0.0025
 MAX_DAILY_CHANGE_WON = 4.0
 MAX_TOTAL_CHANGE_WON = 18.0
+LSTM_SIGNAL_SCALE_WON = 80.0
 
 
 def latest_real_domestic_date() -> pd.Timestamp | None:
@@ -86,7 +87,8 @@ def _stabilize_forecast(raw: pd.DataFrame, lstm_price: np.ndarray, news_adjustme
     horizon = len(lstm_price)
     today_price = float(pd.to_numeric(raw["domestic_price"], errors="coerce").dropna().iloc[-1])
     baseline_price = _recent_trend_baseline(raw, horizon)
-    lstm_for_blend = np.clip(np.asarray(lstm_price, dtype=float), today_price - MAX_TOTAL_CHANGE_WON, today_price + MAX_TOTAL_CHANGE_WON)
+    lstm_delta = np.asarray(lstm_price, dtype=float) - baseline_price
+    lstm_for_blend = baseline_price + np.tanh(lstm_delta / LSTM_SIGNAL_SCALE_WON) * MAX_TOTAL_CHANGE_WON
     effective_lstm_weight = _adaptive_lstm_weight(lstm_price, baseline_price)
     blended_price = effective_lstm_weight * lstm_for_blend + (1 - effective_lstm_weight) * baseline_price
 
@@ -271,12 +273,5 @@ def forecast_next_7_days(model=None, lookback: int = 30, horizon: int = 7, devic
     for path in trend_paths:
         print(f"- {path}")
     if show_gui:
-        try:
-            from gui_app import launch_analysis_gui, launch_indicator_gui, launch_oil_price_gui
-
-            launch_oil_price_gui(raw, forecast, today)
-            launch_indicator_gui(raw, today)
-            launch_analysis_gui(raw)
-        except Exception as exc:
-            print(f"GUI 실행 실패: {exc}")
+        print("GUI 모드는 정리되었습니다. 웹 서버 실행 후 /docs 또는 /graphs에서 결과를 확인하세요.")
     return forecast

@@ -1,11 +1,14 @@
 import joblib
 import numpy as np
 import pandas as pd
+import random
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 from config import PATHS
 from plot_style import plt
 from runtime import configure_tensorflow, get_tensorflow, suppress_native_stderr
+
+SEED = 42
 
 
 def make_sequences(processed: pd.DataFrame, lookback: int = 30, horizon: int = 7):
@@ -19,7 +22,12 @@ def make_sequences(processed: pd.DataFrame, lookback: int = 30, horizon: int = 7
 
 
 def build_lstm(input_shape, horizon: int):
-    get_tensorflow(suppress_logs=True)
+    tf = get_tensorflow(suppress_logs=True)
+    tf.keras.utils.set_random_seed(SEED)
+    try:
+        tf.config.experimental.enable_op_determinism()
+    except Exception:
+        pass
     from tensorflow.keras.layers import Input, LSTM, Dense, Dropout
     from tensorflow.keras.models import Sequential
 
@@ -49,6 +57,8 @@ def inverse_domestic_price(values, scaler_bundle):
 def train_and_evaluate(epochs: int = 30, lookback: int = 30, horizon: int = 7, device: str = "gpu"):
     print("\n[3] LSTM 모델링/검증")
     configure_tensorflow(device)
+    random.seed(SEED)
+    np.random.seed(SEED)
     processed = pd.read_csv(PATHS.processed, index_col=0, parse_dates=True)
     X, y = make_sequences(processed, lookback=lookback, horizon=horizon)
     if len(X) < 50:

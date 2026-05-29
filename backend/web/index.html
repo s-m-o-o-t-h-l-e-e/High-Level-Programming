@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>유가 예측 서비스</title>
+  <link rel="stylesheet" href="/web/styles.css" />
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <article class="hero-main">
+        <div>
+          <div class="eyebrow">Oil Price Forecast</div>
+          <h1>국내 유가 예측</h1>
+          <p class="hero-copy">
+            오늘 전국 휘발유 평균가, 국제 유가, 환율, 뉴스 리스크를 한 화면에서 확인합니다.
+            아래 버튼만 누르면 필요한 분석으로 바로 이동합니다.
+          </p>
+          <div class="status-line" id="dataStatus">데이터 확인 중...</div>
+        </div>
+        <nav class="quick-actions">
+          <button class="action primary" data-action="summary">오늘 유가<span>현재 가격</span></button>
+          <button class="action" data-action="forecast">7일 예측<span>미래 가격</span></button>
+          <a class="action" href="/graphs">그래프 보기<span>전체 차트</span></a>
+          <button class="action" data-action="refresh">최신화<span>데이터 재수집</span></button>
+        </nav>
+      </article>
+
+      <aside class="panel today-box">
+        <div>
+          <div class="today-label">오늘 전국 휘발유 평균가</div>
+          <span class="badge" id="todayDate">기준일 확인 중</span>
+        </div>
+        <div class="today-price" id="todayPrice">-</div>
+        <div class="today-meta">
+          <strong id="sevenDaySummary">7일 전망 계산 중</strong>
+          <span>Opinet-linked public today oil price page</span>
+        </div>
+      </aside>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <h2>핵심 지표</h2>
+          <p>국내 유가 예측에 들어가는 주요 입력값입니다.</p>
+        </div>
+        <a class="link-button" href="/summary">JSON 보기</a>
+      </div>
+      <div class="metrics">
+        <article class="metric"><span>WTI</span><strong id="wtiValue">-</strong><small>국제 유가</small></article>
+        <article class="metric"><span>Brent</span><strong id="brentValue">-</strong><small>국제 유가</small></article>
+        <article class="metric"><span>원/달러</span><strong id="exchangeValue">-</strong><small>환율</small></article>
+        <article class="metric"><span>뉴스 리스크</span><strong id="riskValue">-</strong><small id="riskMeta">100개 기사</small></article>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <h2>7일 예측</h2>
+          <p>오늘 가격에서 다음 7일 동안 어떻게 움직이는지 보여줍니다.</p>
+        </div>
+        <a class="link-button" href="/forecast">예측 데이터</a>
+      </div>
+      <div class="forecast-layout">
+        <article class="panel">
+          <div class="panel-head">
+            <h3>예측 그래프</h3>
+            <a class="link-button" id="forecastPng" href="/figures/seven_day_forecast.png">PNG</a>
+          </div>
+          <div class="chart-frame">
+            <img id="forecastChart" src="/figures/seven_day_forecast.png" alt="향후 7일 유가 예측 그래프" />
+          </div>
+        </article>
+        <article class="panel">
+          <div class="panel-head">
+            <h3>예측표</h3>
+          </div>
+          <div style="overflow:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>날짜</th>
+                  <th>예측</th>
+                  <th>변화</th>
+                  <th>변화 이유</th>
+                </tr>
+              </thead>
+              <tbody id="forecastRows">
+                <tr><td colspan="4">불러오는 중...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <h2>그래프 항목</h2>
+          <p>발표 흐름에 맞춘 분석 그래프입니다.</p>
+        </div>
+        <a class="link-button" href="/graphs">전체 보기</a>
+      </div>
+      <div class="graph-layout">
+        <article class="panel">
+          <div class="panel-head">
+            <h3 id="graphTitle">그래프 미리보기</h3>
+            <a class="link-button" id="graphOpen" href="/graphs">열기</a>
+          </div>
+          <div class="chart-frame">
+            <img id="graphImage" src="/figures/oil_price_trend_1w.png" alt="그래프 미리보기" />
+          </div>
+        </article>
+        <aside class="panel">
+          <div class="panel-head">
+            <h3>목록</h3>
+          </div>
+          <div class="graph-list" id="graphList"></div>
+        </aside>
+      </div>
+    </section>
+  </main>
+  <script src="/web/app.js"></script>
+</body>
+</html>

@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 API_DIR = Path(__file__).resolve().parent
+BACKEND_DIR = API_DIR.parent
+WEB_DIR = BACKEND_DIR / "web"
 if str(API_DIR) not in sys.path:
     sys.path.insert(0, str(API_DIR))
 
@@ -36,6 +39,7 @@ class RefreshResponse(BaseModel):
 
 
 ensure_dirs()
+WEB_DIR.mkdir(exist_ok=True)
 
 app = FastAPI(
     title="Oil Price Forecast Analysis API",
@@ -45,7 +49,9 @@ app = FastAPI(
     redoc_url=None,
 )
 app.mount("/figures", StaticFiles(directory=str(PATHS.figures)), name="figures")
+app.mount("/web", StaticFiles(directory=str(WEB_DIR)), name="web")
 _AUTO_REFRESH_DONE_FOR: str | None = None
+REFRESH_COOLDOWN_SECONDS = 10 * 60
 
 
 def _read_csv(path: Path, **kwargs) -> pd.DataFrame:
@@ -58,6 +64,34 @@ def _run_full_refresh() -> None:
     df = collect_and_preprocess()
     run_eda(df)
     forecast_next_7_days(device="auto", show_gui=False)
+    pd.DataFrame(
+        [
+            {
+                "refreshed_at": pd.Timestamp.now().isoformat(timespec="seconds"),
+                "data_date": pd.Timestamp.today().date().isoformat(),
+            }
+        ]
+    ).to_csv(PATHS.refresh_state, index=False)
+
+
+def _refresh_age_seconds() -> float | None:
+    if not PATHS.refresh_state.exists():
+        return None
+    state = _read_csv(PATHS.refresh_state)
+    if state.empty or "refreshed_at" not in state.columns:
+        return None
+    refreshed_at = pd.to_datetime(state["refreshed_at"].iloc[-1], errors="coerce")
+    if pd.isna(refreshed_at):
+        return None
+    if refreshed_at.tzinfo is not None:
+        refreshed_at = refreshed_at.tz_convert(None)
+    return max(0.0, (pd.Timestamp.now() - refreshed_at).total_seconds())
+
+
+def _human_age(seconds: float) -> str:
+    if seconds < 60:
+        return f"{int(seconds)}초"
+    return f"{int(seconds // 60)}분 {int(seconds % 60)}초"
 
 
 def _outputs_are_current() -> bool:
@@ -73,10 +107,7 @@ def _outputs_are_current() -> bool:
     if forecast.empty:
         return False
     first_forecast_date = pd.Timestamp(forecast["date"].min()).normalize()
-    if first_forecast_date <= today:
-        return False
-
-    return True
+    return first_forecast_date > today
 
 
 def _ensure_current_outputs() -> None:
@@ -89,7 +120,6 @@ def _ensure_current_outputs() -> None:
 
 
 def _figure_files() -> list[dict[str, str]]:
-    files = []
     titles = {
         "oil_price_dashboard.png": "유가 현황 및 7일 예측",
         "seven_day_forecast.png": "향후 7일 유가 예측",
@@ -124,6 +154,8 @@ def _figure_files() -> list[dict[str, str]]:
         "event_window_changes.png": 140,
         "correlation_heatmap.png": 150,
     }
+
+    files = []
     figure_paths = sorted(PATHS.figures.glob("*.png"), key=lambda path: (order.get(path.name, 999), path.name))
     for path in figure_paths:
         version = int(path.stat().st_mtime)
@@ -138,67 +170,12 @@ def _figure_files() -> list[dict[str, str]]:
     return files
 
 
-def _graph_gallery_html() -> str:
-    figures = _figure_files()
-    cards = "\n".join(
-        f"""
-        <article class="graph-row">
-          <a class="thumb" href="{figure["detail_url"]}"><img src="{figure["url"]}" alt="{figure["title"]}" /></a>
-          <div>
-            <span class="eyebrow">FIGURE</span>
-            <h2>{figure["title"]}</h2>
-            <p>{figure["filename"]}</p>
-          </div>
-          <nav>
-            <a href="{figure["detail_url"]}">열기</a>
-            <a href="{figure["url"]}">PNG</a>
-          </nav>
-        </article>
-        """
-        for figure in figures
-    )
-    return f"""
-    <!doctype html>
-    <html lang="ko">
-    <head>
-      <meta charset="utf-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1" />
-      <title>전체 분석 그래프</title>
-      <style>
-        body {{ margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; background: #f4f1ea; color: #17202a; }}
-        a {{ color: inherit; text-decoration: none; font-weight: 850; }}
-        header {{ padding: 28px clamp(18px, 4vw, 54px); background: #17202a; color: #fff; display: flex; align-items: end; justify-content: space-between; gap: 18px; }}
-        h1 {{ margin: 0; font-size: clamp(30px, 5vw, 58px); letter-spacing: 0; }}
-        header nav {{ display: flex; gap: 8px; flex-wrap: wrap; }}
-        header nav a {{ border: 1px solid rgba(255,255,255,.28); padding: 9px 12px; border-radius: 4px; }}
-        main {{ max-width: 1260px; margin: 0 auto; padding: 28px clamp(18px, 4vw, 54px) 54px; }}
-        .gallery {{ display: grid; gap: 12px; }}
-        .graph-row {{ min-height: 132px; display: grid; grid-template-columns: 210px 1fr auto; gap: 18px; align-items: center; padding: 12px; background: #fff; border: 1px solid #2c3440; box-shadow: 6px 6px 0 #d9d2c4; }}
-        .thumb img {{ width: 210px; aspect-ratio: 16 / 9; object-fit: cover; display: block; background: #fff; border: 1px solid #d6d9df; }}
-        .eyebrow {{ display: block; color: #b85c00; font-size: 11px; font-weight: 950; letter-spacing: .08em; margin-bottom: 8px; }}
-        .graph-row h2 {{ margin: 0; font-size: 21px; }}
-        .graph-row p {{ margin: 7px 0 0; color: #68717d; font-weight: 720; }}
-        .graph-row nav {{ display: flex; gap: 8px; }}
-        .graph-row nav a {{ min-width: 58px; text-align: center; border: 1px solid #17202a; padding: 9px 12px; border-radius: 4px; background: #f8fafc; }}
-        @media (max-width: 760px) {{ header {{ align-items: flex-start; flex-direction: column; }} .graph-row {{ grid-template-columns: 1fr; }} .thumb img {{ width: 100%; }} .graph-row nav {{ justify-content: flex-start; }} }}
-      </style>
-    </head>
-    <body>
-      <header>
-        <h1>Graph Library</h1>
-        <nav><a href="/">홈</a><a href="/docs">API Docs</a><a href="/graphs/list">그래프 JSON</a></nav>
-      </header>
-      <main><section class="gallery">{cards or "<p>아직 생성된 그래프가 없습니다. /refresh를 먼저 실행하세요.</p>"}</section></main>
-    </body>
-    </html>
-    """
-
-
 def _forecast_reason(
     item: dict[str, Any],
     latest: dict[str, Any],
     today_price: float | None,
     previous_price: float | None,
+    news_headlines: list[str] | None = None,
 ) -> str:
     predicted_price = float(item.get("predicted_domestic_price", 0))
     today_diff = predicted_price - today_price if today_price is not None else 0
@@ -226,6 +203,11 @@ def _forecast_reason(
         news_text = f"최근 뉴스 {news_count}건의 지정학적 리스크 신호는 단기 유가에 {news_direction}으로 반영됐습니다."
     elif news_count > 0:
         news_text = f"최근 뉴스 {news_count}건은 뚜렷한 방향성보다 관망 신호에 가깝게 반영됐습니다."
+
+    headline_text = ""
+    if news_headlines:
+        headline_text = "주요 뉴스 근거는 " + ", ".join(f"'{headline}'" for headline in news_headlines[:2]) + "입니다."
+    event_detail_text = _news_event_detail(news_headlines or [], news_adjustment)
 
     exchange_text = ""
     exchange_level = float(exchange) if exchange else None
@@ -280,23 +262,141 @@ def _forecast_reason(
             "더 빠르게 전가될 수 있다'입니다."
         )
     elif news_adjustment > 0:
-        hypothesis_text = (
-            "현재 가설은 '뉴스 리스크가 단기 불확실성을 키워 국내 유가에 제한적인 상승 압력을 만든다'입니다."
-        )
+        hypothesis_text = "현재 가설은 '뉴스 리스크가 단기 불확실성을 키워 국내 유가에 제한적인 상승 압력을 만든다'입니다."
     elif news_adjustment < 0:
-        hypothesis_text = (
-            "현재 가설은 '뉴스 리스크 완화가 국제유가 부담을 낮추며 국내 유가도 완만히 내려갈 수 있다'입니다."
-        )
+        hypothesis_text = "현재 가설은 '뉴스 리스크 완화가 국제유가 부담을 낮추며 국내 유가도 완만히 내려갈 수 있다'입니다."
     elif exchange_level is not None and exchange_level >= 1450:
-        hypothesis_text = (
-            "현재 가설은 '뉴스 방향성이 약해도 높은 환율이 수입 비용을 높여 국내 유가 하락을 제한한다'입니다."
-        )
+        hypothesis_text = "현재 가설은 '뉴스 방향성이 약해도 높은 환율이 수입 비용을 높여 국내 유가 하락을 제한한다'입니다."
     else:
-        hypothesis_text = (
-            "현재 가설은 '뚜렷한 외부 충격이 없으면 국내 유가는 최근 평균 흐름을 따라 완만하게 움직인다'입니다."
-        )
+        hypothesis_text = "현재 가설은 '뚜렷한 외부 충격이 없으면 국내 유가는 최근 평균 흐름을 따라 완만하게 움직인다'입니다."
 
-    return " ".join(text for text in [movement, hypothesis_text, news_text, exchange_text, oil_text, balance_text] if text)
+    return " ".join(
+        text
+        for text in [movement, hypothesis_text, news_text, headline_text, event_detail_text, exchange_text, oil_text, balance_text]
+        if text
+    )
+
+
+def _news_event_detail(headlines: list[str], adjustment_pct: float) -> str:
+    if not headlines:
+        return ""
+
+    text = " ".join(headlines).lower()
+    timing = _news_timing_text(text)
+    escalation_terms = {
+        "war": "전쟁 가능성",
+        "attack": "공격",
+        "attacked": "공격",
+        "blockade": "봉쇄",
+        "sanctions": "제재",
+        "disruption": "수송 차질",
+        "hormuz": "호르무즈 해협 리스크",
+        "tanker": "유조선 운송 차질",
+        "strait": "해협 통항 리스크",
+    }
+    deescalation_terms = {
+        "ceasefire": "휴전",
+        "deal": "합의",
+        "talks": "협상",
+        "negotiation": "협상",
+        "negotiations": "협상",
+        "approval": "최종 승인 대기",
+        "lifted": "봉쇄 해제",
+        "open": "해협 개방",
+        "reopen": "재개방",
+    }
+    uncertainty_terms = {
+        "rejects": "합의 부인",
+        "final decision": "최종 결정 대기",
+        "tentative": "잠정 합의",
+        "claims": "주장 엇갈림",
+    }
+
+    escalation_hits = sorted({label for word, label in escalation_terms.items() if word in text})
+    deescalation_hits = sorted({label for word, label in deescalation_terms.items() if word in text})
+    uncertainty_hits = sorted({label for word, label in uncertainty_terms.items() if word in text})
+
+    timing_prefix = f"{timing} " if timing else ""
+    if escalation_hits and not deescalation_hits:
+        return (
+            f"{timing_prefix}뉴스 내용상 {', '.join(escalation_hits[:3])}이 확인되어 원유 수송 또는 공급 차질 가능성이 커진 것으로 해석했습니다. "
+            "이 경우 국제유가 상승 압력이 국내 유가에 시차를 두고 반영될 수 있습니다."
+        )
+    if deescalation_hits and not escalation_hits:
+        detail = (
+            f"{timing_prefix}뉴스 내용상 {', '.join(deescalation_hits[:3])} 신호가 확인되어 전쟁/봉쇄 리스크가 완화되는 쪽으로 해석했습니다. "
+            "이 경우 국제유가 하락 압력이 생기지만, 국내 가격은 환율 때문에 천천히 반영될 수 있습니다."
+        )
+        if uncertainty_hits:
+            detail += f" 다만 {', '.join(uncertainty_hits[:2])} 표현도 있어 완전한 하락 전환보다는 제한적 조정으로 봤습니다."
+        return detail
+    if escalation_hits and deescalation_hits:
+        return (
+            f"{timing_prefix}뉴스 안에 {', '.join(escalation_hits[:2])}와 {', '.join(deescalation_hits[:2])}가 함께 나타나 방향성이 엇갈립니다. "
+            "따라서 급등락보다는 환율과 국제유가 수준을 함께 고려한 제한적 변동으로 반영했습니다."
+        )
+    if uncertainty_hits:
+        return f"{timing_prefix}뉴스 제목에 {', '.join(uncertainty_hits[:3])} 신호가 있어 협상 결과가 확정되기 전까지는 관망 요인으로 반영했습니다."
+    if adjustment_pct > 0:
+        return "뉴스 내용은 공급 차질 가능성을 키우는 방향으로 해석되어 단기 상승 요인으로 반영했습니다."
+    if adjustment_pct < 0:
+        return "뉴스 내용은 지정학적 긴장 완화 가능성을 보여 단기 하락 요인으로 반영했습니다."
+    return "뉴스 내용에서 강한 상승/하락 사건 신호가 뚜렷하지 않아 중립 요인으로 반영했습니다."
+
+
+def _news_timing_text(text: str) -> str:
+    digit_match = re.search(r"(?:in|within)\s+(\d+)\s+days?", text)
+    if digit_match:
+        return f"기사에서 약 {digit_match.group(1)}일 뒤 사건 가능성이 언급되어"
+
+    word_days = {
+        "one": 1,
+        "two": 2,
+        "three": 3,
+        "four": 4,
+        "five": 5,
+        "six": 6,
+        "seven": 7,
+    }
+    for word, day in word_days.items():
+        if re.search(rf"(?:in|within)\s+{word}\s+days?", text):
+            return f"기사에서 약 {day}일 뒤 사건 가능성이 언급되어"
+    korean_match = re.search(r"(\d+)\s*일\s*(?:뒤|후)", text)
+    if korean_match:
+        return f"기사에서 약 {korean_match.group(1)}일 뒤 사건 가능성이 언급되어"
+    if "next week" in text or "다음 주" in text:
+        return "기사에서 다음 주 사건 가능성이 언급되어"
+    return ""
+
+
+def _news_headlines_for_reason(adjustment_pct: float, limit: int = 2) -> list[str]:
+    articles = _read_csv(PATHS.news_articles)
+    if articles.empty or "title" not in articles.columns:
+        return []
+
+    scored = articles.copy()
+    if "net_score" not in scored.columns:
+        scored["net_score"] = 0
+    scored["net_score"] = pd.to_numeric(scored["net_score"], errors="coerce").fillna(0)
+    scored["title"] = scored["title"].astype(str).str.replace(r"\s+", " ", regex=True).str.strip()
+    scored = scored[scored["title"].ne("")]
+    if scored.empty:
+        return []
+
+    if adjustment_pct < 0:
+        selected = scored.sort_values(["net_score", "title"], ascending=[True, True]).head(limit)
+    elif adjustment_pct > 0:
+        selected = scored.sort_values(["net_score", "title"], ascending=[False, True]).head(limit)
+    else:
+        selected = scored.reindex(scored["net_score"].abs().sort_values(ascending=False).index).head(limit)
+
+    cleaned = []
+    for title in selected["title"].tolist():
+        title = title.replace(" - Google News", "").strip()
+        if len(title) > 95:
+            title = title[:92].rstrip() + "..."
+        cleaned.append(title)
+    return cleaned
 
 
 def _latest_snapshot() -> dict[str, Any]:
@@ -306,6 +406,7 @@ def _latest_snapshot() -> dict[str, Any]:
     meta = _read_csv(PATHS.online_meta)
     audit = _read_csv(PATHS.source_audit)
     news = load_news_adjustment()
+    news_headlines = _news_headlines_for_reason(float(news.get("forecast_adjustment_pct", 0.0)))
 
     latest: dict[str, Any] = {}
     if not raw.empty:
@@ -346,7 +447,7 @@ def _latest_snapshot() -> dict[str, Any]:
                     "news_risk_score": round(float(item.get("news_risk_score", 0)), 4),
                     "news_adjustment_pct": normalized_item["news_adjustment_pct"],
                     "news_article_count": normalized_item["news_article_count"],
-                    "reason": _forecast_reason(normalized_item, latest, today_price, previous_price),
+                    "reason": _forecast_reason(normalized_item, latest, today_price, previous_price, news_headlines),
                 }
             )
             previous_price = predicted
@@ -355,6 +456,7 @@ def _latest_snapshot() -> dict[str, Any]:
         "latest": latest,
         "forecast": forecast_rows,
         "news": news,
+        "news_headlines": news_headlines,
         "meta": dict(zip(meta.get("key", []), meta.get("value", []))) if not meta.empty else {},
         "sources": dict(zip(audit.get("key", []), audit.get("value", []))) if not audit.empty else {},
     }
@@ -403,9 +505,38 @@ def _build_agent_answer(question: str) -> tuple[str, dict[str, Any]]:
     return answer, snapshot
 
 
+def _web_file(filename: str) -> FileResponse:
+    return FileResponse(
+        WEB_DIR / filename,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+        },
+    )
+
+
+def _render_web_template(template_name: str, **values: str) -> str:
+    text = (WEB_DIR / template_name).read_text(encoding="utf-8")
+    for key, value in values.items():
+        text = text.replace(f"{{{{{key}}}}}", value)
+    return text
+
+
 @app.get("/", response_class=HTMLResponse, tags=["homepage"])
-def homepage() -> str:
-    return _HOME_HTML
+def homepage() -> FileResponse:
+    return _web_file("index.html")
+
+
+@app.get("/home", response_class=HTMLResponse, include_in_schema=False)
+def home_alias() -> FileResponse:
+    return _web_file("index.html")
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+@app.get("/apple-touch-icon.png", include_in_schema=False)
+@app.get("/apple-touch-icon-precomposed.png", include_in_schema=False)
+def browser_icon_probe() -> Response:
+    return Response(status_code=204)
 
 
 @app.get("/health", tags=["system"])
@@ -429,461 +560,44 @@ def graph_list() -> list[dict[str, str]]:
 
 
 @app.get("/graphs", response_class=HTMLResponse, tags=["graphs"])
-def graph_gallery() -> str:
-    return _graph_gallery_html()
+def graph_gallery() -> FileResponse:
+    return _web_file("graphs.html")
 
 
 @app.get("/graphs/{filename}", response_class=HTMLResponse, tags=["graphs"])
-def graph_detail(filename: str) -> str:
+def graph_detail(filename: str) -> HTMLResponse:
     safe_name = Path(filename).name
     figures = {figure["filename"]: figure for figure in _figure_files()}
     figure = figures.get(safe_name)
     if figure is None:
-        return "<h1>그래프를 찾을 수 없습니다</h1><p><a href='/graphs'>전체 그래프로 돌아가기</a></p>"
-    return f"""
-    <!doctype html>
-    <html lang="ko">
-    <head>
-      <meta charset="utf-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1" />
-      <title>{figure["title"]}</title>
-      <style>
-        body {{ margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; background: #f7f8fa; color: #222; }}
-        header {{ padding: 28px 42px 20px; background: #fff; border-bottom: 1px solid #e5e7eb; }}
-        h1 {{ margin: 0; font-size: 32px; }}
-        main {{ padding: 28px 42px 48px; }}
-        img {{ width: 100%; max-width: 1320px; display: block; margin: 0 auto; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; }}
-        a {{ color: #111827; font-weight: 700; }}
-      </style>
-    </head>
-    <body>
-      <header><h1>{figure["title"]}</h1><p><a href="/graphs">전체 그래프</a> · <a href="{figure["url"]}">원본 PNG</a> · <a href="/docs">API Docs</a></p></header>
-      <main><img src="{figure["url"]}" alt="{figure["title"]}" /></main>
-    </body>
-    </html>
-    """
-
-
-_DOCS_HTML = """
-<!doctype html>
-<html lang="ko">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>유가 분석 API Docs</title>
-  <style>
-    :root {
-      color-scheme: light;
-      --bg: #f5f6fb;
-      --ink: #162033;
-      --muted: #667085;
-      --line: #d9dee8;
-      --panel: #ffffff;
-      --accent: #9996e2;
-      --accent-soft: #f0effc;
-      --green: #07855f;
-      --dark: #111827;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      background: var(--bg);
-      color: var(--ink);
-      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", sans-serif;
-    }
-    a { color: inherit; text-decoration: none; }
-    button { font: inherit; cursor: pointer; }
-    .layout {
-      min-height: 100vh;
-      display: grid;
-      grid-template-columns: 310px minmax(0, 1fr);
-    }
-    aside {
-      position: sticky;
-      top: 0;
-      height: 100vh;
-      padding: 24px 18px;
-      background: #fff;
-      border-right: 1px solid var(--line);
-      overflow: auto;
-    }
-    .brand {
-      padding: 4px 4px 20px;
-      border-bottom: 1px solid var(--line);
-      margin-bottom: 16px;
-    }
-    .brand strong {
-      display: block;
-      font-size: 25px;
-      line-height: 1.15;
-      letter-spacing: 0;
-    }
-    .brand span {
-      display: block;
-      margin-top: 8px;
-      color: var(--muted);
-      line-height: 1.55;
-      font-weight: 750;
-      word-break: keep-all;
-    }
-    .nav-links {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      margin-bottom: 16px;
-    }
-    .nav-links a {
-      min-height: 38px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      font-weight: 900;
-      background: #fff;
-    }
-    .endpoint-list {
-      display: grid;
-      gap: 8px;
-    }
-    .endpoint {
-      width: 100%;
-      display: grid;
-      gap: 5px;
-      padding: 13px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fff;
-      text-align: left;
-      color: var(--ink);
-    }
-    .endpoint.active {
-      border-color: var(--accent);
-      background: var(--accent-soft);
-      box-shadow: inset 4px 0 0 var(--accent);
-    }
-    .endpoint small {
-      color: var(--muted);
-      font-weight: 800;
-    }
-    .method {
-      display: inline-flex;
-      width: fit-content;
-      min-height: 25px;
-      align-items: center;
-      padding: 0 8px;
-      border-radius: 999px;
-      background: var(--accent-soft);
-      color: var(--accent);
-      font-size: 12px;
-      font-weight: 950;
-    }
-    .method.post {
-      background: #e7f7ef;
-      color: var(--green);
-    }
-    main {
-      min-width: 0;
-      padding: 30px clamp(18px, 4vw, 46px) 54px;
-    }
-    header {
-      display: flex;
-      align-items: flex-end;
-      justify-content: space-between;
-      gap: 18px;
-      margin-bottom: 18px;
-    }
-    h1 {
-      margin: 0;
-      font-size: clamp(34px, 6vw, 58px);
-      line-height: 1.05;
-      letter-spacing: 0;
-    }
-    .lead {
-      margin: 10px 0 0;
-      color: var(--muted);
-      font-size: 16px;
-      line-height: 1.65;
-      font-weight: 750;
-      word-break: keep-all;
-    }
-    .status-pill {
-      min-height: 38px;
-      display: inline-flex;
-      align-items: center;
-      padding: 0 12px;
-      border-radius: 999px;
-      background: #fff;
-      border: 1px solid var(--line);
-      color: var(--muted);
-      font-weight: 900;
-      white-space: nowrap;
-    }
-    .workspace {
-      display: grid;
-      grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr);
-      gap: 16px;
-      align-items: start;
-    }
-    .panel {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      overflow: hidden;
-      box-shadow: 0 16px 38px rgba(15, 23, 42, .06);
-    }
-    .panel-head {
-      padding: 16px 18px;
-      border-bottom: 1px solid var(--line);
-      background: #fbfcff;
-    }
-    .panel-head h2 {
-      margin: 0;
-      font-size: 23px;
-    }
-    .panel-head p {
-      margin: 8px 0 0;
-      color: var(--muted);
-      line-height: 1.6;
-      font-weight: 750;
-      word-break: keep-all;
-    }
-    .detail {
-      padding: 18px;
-      display: grid;
-      gap: 14px;
-    }
-    .row {
-      display: grid;
-      grid-template-columns: 120px 1fr;
-      gap: 12px;
-      align-items: start;
-      padding-bottom: 12px;
-      border-bottom: 1px solid var(--line);
-    }
-    .row:last-child { border-bottom: 0; padding-bottom: 0; }
-    .row span {
-      color: var(--muted);
-      font-weight: 950;
-      font-size: 13px;
-    }
-    .row strong, .row code {
-      font-weight: 900;
-      word-break: break-word;
-    }
-    code {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 13px;
-    }
-    .actions {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      padding: 0 18px 18px;
-    }
-    .run, .ghost {
-      min-height: 42px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      padding: 0 14px;
-      border-radius: 8px;
-      border: 1px solid var(--accent);
-      background: var(--accent);
-      color: #fff;
-      font-weight: 950;
-    }
-    .ghost {
-      background: #fff;
-      color: var(--ink);
-      border-color: var(--line);
-    }
-    .result {
-      background: var(--dark);
-      color: #f8fafc;
-    }
-    .result .panel-head {
-      background: #111827;
-      border-color: rgba(255,255,255,.12);
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-    }
-    .result .panel-head h2 { color: #fff; }
-    .result .panel-head p { color: #cbd5e1; }
-    pre {
-      min-height: 472px;
-      max-height: 640px;
-      margin: 0;
-      padding: 18px;
-      overflow: auto;
-      white-space: pre-wrap;
-      word-break: break-word;
-      line-height: 1.58;
-      font-size: 13px;
-    }
-    @media (max-width: 960px) {
-      .layout, .workspace { grid-template-columns: 1fr; }
-      aside { position: relative; height: auto; }
-      header { align-items: flex-start; flex-direction: column; }
-    }
-  </style>
-</head>
-<body>
-  <div class="layout">
-    <aside>
-      <div class="brand">
-        <strong>유가 분석 API</strong>
-        <span>필요한 API를 선택하고 바로 실행 결과를 확인합니다.</span>
-      </div>
-      <nav class="nav-links">
-        <a href="/">홈</a>
-        <a href="/graphs">그래프</a>
-        <a href="/openapi.json">OpenAPI</a>
-        <a href="/summary">JSON</a>
-      </nav>
-      <div class="endpoint-list" id="endpointList"></div>
-    </aside>
-
-    <main>
-      <header>
-        <div>
-          <h1>유가 분석 실행 문서</h1>
-          <p class="lead">국내 유가, 국제 유가, 환율, 뉴스 리스크 분석 API를 간단하게 확인합니다.</p>
-        </div>
-        <div class="status-pill" id="statusPill">대기 중</div>
-      </header>
-
-      <section class="workspace">
-        <article class="panel">
-          <div class="panel-head">
-            <h2 id="endpointTitle">API 선택</h2>
-            <p id="endpointDesc">왼쪽 목록에서 실행할 API를 선택하세요.</p>
-          </div>
-          <div class="detail">
-            <div class="row"><span>Method</span><strong id="endpointMethod">-</strong></div>
-            <div class="row"><span>Path</span><code id="endpointPath">-</code></div>
-            <div class="row"><span>Output</span><strong id="endpointOutput">-</strong></div>
-            <div class="row"><span>Note</span><strong id="endpointNote">-</strong></div>
-          </div>
-          <div class="actions">
-            <button class="run" id="runButton">실행</button>
-            <a class="ghost" id="openButton" href="#">새 창으로 열기</a>
-          </div>
-        </article>
-
-        <article class="panel result">
-          <div class="panel-head">
-            <div>
-              <h2>실행 결과</h2>
-              <p id="resultTitle">결과가 여기에 표시됩니다.</p>
-            </div>
-            <span id="resultStatus">Ready</span>
-          </div>
-          <pre id="output">왼쪽에서 API를 선택한 뒤 실행 버튼을 누르세요.</pre>
-        </article>
-      </section>
-    </main>
-  </div>
-
-  <script>
-    const endpoints = [
-      {
-        method: 'GET',
-        path: '/summary',
-        title: '오늘 유가 요약',
-        desc: '국내 유가, WTI, Brent, 환율, 뉴스 리스크를 한 번에 확인합니다.',
-        output: 'latest, forecast, news, meta, sources',
-        note: '페이지 진입 시 최신 산출물이 오래됐으면 자동 갱신을 시도합니다.'
-      },
-      {
-        method: 'GET',
-        path: '/forecast',
-        title: '7일 예측',
-        desc: '오늘 날짜 기준 향후 7일 예측 유가와 변화 이유를 확인합니다.',
-        output: 'date, predicted_domestic_price, reason',
-        note: '표의 reason은 전일 예측 대비 흐름과 뉴스/시장 지표를 함께 설명합니다.'
-      },
-      {
-        method: 'GET',
-        path: '/graphs/list',
-        title: '그래프 목록',
-        desc: '웹에서 볼 수 있는 전체 그래프 파일과 원본 PNG 주소를 확인합니다.',
-        output: 'filename, title, url, detail_url',
-        note: '그래프 순서는 보고서 발표 흐름에 맞춰 정렬되어 있습니다.'
-      },
-      {
-        method: 'POST',
-        path: '/refresh',
-        title: '최신 데이터 갱신',
-        desc: '온라인 데이터를 다시 수집하고 EDA, 예측, 그래프 생성을 실행합니다.',
-        output: 'status, message',
-        note: '네트워크와 모델 예측이 포함되어 시간이 걸릴 수 있습니다.',
-        confirm: '최신 데이터 수집과 그래프 재생성을 실행할까요? 시간이 걸릴 수 있습니다.'
-      }
-    ];
-    let selectedIndex = 0;
-
-    function renderEndpointList() {
-      const list = document.getElementById('endpointList');
-      list.innerHTML = endpoints.map((endpoint, index) => `
-        <button class="endpoint ${index === selectedIndex ? 'active' : ''}" data-index="${index}">
-          <span class="method ${endpoint.method === 'POST' ? 'post' : ''}">${endpoint.method} ${endpoint.path}</span>
-          <small>${endpoint.title}</small>
-        </button>
-      `).join('');
-      list.querySelectorAll('button').forEach(button => {
-        button.addEventListener('click', () => selectEndpoint(Number(button.dataset.index)));
-      });
-    }
-    function selectEndpoint(index) {
-      selectedIndex = index;
-      const endpoint = endpoints[selectedIndex];
-      renderEndpointList();
-      document.getElementById('endpointTitle').textContent = endpoint.title;
-      document.getElementById('endpointDesc').textContent = endpoint.desc;
-      document.getElementById('endpointMethod').textContent = endpoint.method;
-      document.getElementById('endpointPath').textContent = endpoint.path;
-      document.getElementById('endpointOutput').textContent = endpoint.output;
-      document.getElementById('endpointNote').textContent = endpoint.note;
-      document.getElementById('openButton').href = endpoint.method === 'GET' ? endpoint.path : '#';
-      document.getElementById('openButton').style.display = endpoint.method === 'GET' ? 'inline-flex' : 'none';
-    }
-    function setOutput(title, status, data) {
-      document.getElementById('statusPill').textContent = status;
-      document.getElementById('resultTitle').textContent = title;
-      document.getElementById('resultStatus').textContent = status;
-      document.getElementById('output').textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
-    }
-    async function runSelected() {
-      const endpoint = endpoints[selectedIndex];
-      if (endpoint.confirm && !confirm(endpoint.confirm)) return;
-      setOutput(`${endpoint.method} ${endpoint.path}`, '실행 중...', '');
-      try {
-        const response = await fetch(endpoint.path, { method: endpoint.method });
-        const data = await response.json();
-        setOutput(`${endpoint.method} ${endpoint.path}`, `${response.status} ${response.statusText}`, data);
-      } catch (error) {
-        setOutput(`${endpoint.method} ${endpoint.path}`, '오류', String(error));
-      }
-    }
-    document.getElementById('runButton').addEventListener('click', runSelected);
-    renderEndpointList();
-    selectEndpoint(0);
-  </script>
-</body>
-</html>
-"""
+        return HTMLResponse("<h1>그래프를 찾을 수 없습니다</h1><p><a href='/graphs'>전체 그래프로 돌아가기</a></p>", status_code=404)
+    return HTMLResponse(
+        _render_web_template(
+            "graph-detail.html",
+            title=figure["title"],
+            url=figure["url"],
+            filename=figure["filename"],
+        )
+    )
 
 
 @app.get("/docs", response_class=HTMLResponse, include_in_schema=False)
-def simple_docs() -> str:
-    return _DOCS_HTML
+def simple_docs() -> FileResponse:
+    return _web_file("docs.html")
 
 
 @app.post("/refresh", response_model=RefreshResponse, tags=["analysis"])
 def refresh_data() -> RefreshResponse:
     global _AUTO_REFRESH_DONE_FOR
+    age = _refresh_age_seconds()
+    if age is not None and age < REFRESH_COOLDOWN_SECONDS and _outputs_are_current():
+        return RefreshResponse(
+            status="cached",
+            message=(
+                f"{_human_age(age)} 전에 이미 최신 데이터로 갱신했습니다. "
+                "예측값이 매번 흔들리지 않도록 기존 결과를 유지합니다."
+            ),
+        )
     _run_full_refresh()
     _AUTO_REFRESH_DONE_FOR = pd.Timestamp.today().date().isoformat()
     return RefreshResponse(status="ok", message="최신 데이터 수집, EDA, 7일 예측을 완료했습니다.")
@@ -893,1322 +607,3 @@ def refresh_data() -> RefreshResponse:
 def agent(request: AgentRequest) -> AgentResponse:
     answer, facts = _build_agent_answer(request.question)
     return AgentResponse(question=request.question, answer=answer, facts=facts)
-
-
-_HOME_HTML = """
-<!doctype html>
-<html lang="ko">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Oil Price Market Terminal</title>
-  <style>
-    :root {
-      color-scheme: light;
-      --paper: #f4f1ea;
-      --ink: #17202a;
-      --muted: #68717d;
-      --line: #2c3440;
-      --hair: #d9d2c4;
-      --white: #fffdf8;
-      --blue: #9996e2;
-      --red: #d91e18;
-      --green: #087f5b;
-      --gold: #b85c00;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      background:
-        linear-gradient(90deg, rgba(23,32,42,.035) 1px, transparent 1px),
-        linear-gradient(rgba(23,32,42,.035) 1px, transparent 1px),
-        var(--paper);
-      background-size: 34px 34px;
-      color: var(--ink);
-      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", sans-serif;
-    }
-    a { color: inherit; text-decoration: none; }
-    button, textarea {
-      font: inherit;
-      color: inherit;
-    }
-    button { cursor: pointer; }
-    .terminal {
-      min-height: 100vh;
-      display: grid;
-      grid-template-rows: auto auto 1fr;
-    }
-    .command-bar {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 18px;
-      align-items: center;
-      padding: 14px clamp(16px, 4vw, 52px);
-      background: #17202a;
-      color: #fff;
-      border-bottom: 4px solid #b85c00;
-    }
-    .brand {
-      display: flex;
-      align-items: baseline;
-      gap: 14px;
-      min-width: 0;
-    }
-    .brand strong {
-      font-size: clamp(22px, 3vw, 38px);
-      line-height: 1;
-      letter-spacing: 0;
-      white-space: nowrap;
-    }
-    .brand span {
-      color: #cbd5e1;
-      font-size: 12px;
-      font-weight: 850;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-    }
-    .command-links {
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-    .terminal-button {
-      min-height: 38px;
-      padding: 0 13px;
-      border: 1px solid currentColor;
-      border-radius: 4px;
-      background: transparent;
-      color: currentColor;
-      font-weight: 900;
-    }
-    .terminal-button.fill {
-      background: #fff;
-      color: #17202a;
-      border-color: #fff;
-    }
-    .ticker-tape {
-      display: grid;
-      grid-template-columns: repeat(5, minmax(140px, 1fr));
-      border-bottom: 1px solid var(--line);
-      background: var(--white);
-      overflow-x: auto;
-    }
-    .ticker-item {
-      min-height: 78px;
-      padding: 14px 18px;
-      border-right: 1px solid var(--hair);
-    }
-    .ticker-item:last-child { border-right: 0; }
-    .ticker-label {
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 950;
-      letter-spacing: .04em;
-    }
-    .ticker-value {
-      margin-top: 8px;
-      font-size: 24px;
-      font-weight: 950;
-      letter-spacing: 0;
-    }
-    .workspace {
-      width: min(1480px, 100%);
-      margin: 0 auto;
-      padding: 26px clamp(16px, 4vw, 52px) 58px;
-    }
-    .tabbar {
-      display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      border: 2px solid var(--line);
-      background: var(--white);
-      box-shadow: 8px 8px 0 var(--hair);
-    }
-    .tabbar button {
-      min-height: 54px;
-      border: 0;
-      border-right: 1px solid var(--line);
-      background: transparent;
-      color: var(--muted);
-      font-size: 17px;
-      font-weight: 950;
-    }
-    .tabbar button:last-child { border-right: 0; }
-    .tabbar button.active {
-      background: var(--ink);
-      color: #fff;
-    }
-    .screen { display: none; margin-top: 26px; }
-    .screen.active { display: block; }
-    .board {
-      background: var(--white);
-      border: 2px solid var(--line);
-      box-shadow: 8px 8px 0 var(--hair);
-    }
-    .board-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 14px;
-      padding: 15px 18px;
-      border-bottom: 2px solid var(--line);
-      background: #fbf8ef;
-    }
-    .board-head h2 {
-      margin: 0;
-      font-size: 22px;
-      letter-spacing: 0;
-    }
-    .board-head small {
-      color: var(--muted);
-      font-weight: 850;
-    }
-    .overview-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 1.08fr) minmax(360px, .92fr);
-      gap: 18px;
-    }
-    .quote-main {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 220px;
-      gap: 22px;
-      padding: 24px;
-    }
-    .quote-main h1 {
-      margin: 0;
-      font-size: clamp(44px, 8vw, 104px);
-      line-height: .92;
-      letter-spacing: 0;
-    }
-    .quote-text {
-      margin: 16px 0 0;
-      color: var(--muted);
-      font-size: 16px;
-      line-height: 1.65;
-      max-width: 780px;
-    }
-    .price-ticket {
-      align-self: stretch;
-      display: grid;
-      align-content: center;
-      justify-items: end;
-      padding: 18px;
-      border-left: 2px solid var(--line);
-    }
-    .price-ticket span {
-      color: var(--muted);
-      font-size: 13px;
-      font-weight: 950;
-    }
-    .price-ticket strong {
-      margin-top: 8px;
-      font-size: 38px;
-      letter-spacing: 0;
-      text-align: right;
-    }
-    .price-ticket em {
-      margin-top: 9px;
-      font-style: normal;
-      font-weight: 950;
-    }
-    .up { color: var(--red); }
-    .down { color: var(--blue); }
-    .flat { color: var(--green); }
-    .matrix {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      border-top: 2px solid var(--line);
-    }
-    .metric {
-      min-height: 116px;
-      padding: 18px;
-      border-right: 1px solid var(--hair);
-      background: #fff;
-    }
-    .metric:last-child { border-right: 0; }
-    .metric span {
-      display: block;
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 950;
-    }
-    .metric strong {
-      display: block;
-      margin-top: 8px;
-      font-size: 24px;
-      letter-spacing: 0;
-    }
-    .metric small {
-      display: block;
-      margin-top: 7px;
-      color: var(--muted);
-      font-weight: 750;
-    }
-    .forecast-list {
-      padding: 14px;
-      display: grid;
-      gap: 10px;
-    }
-    .forecast-line {
-      display: grid;
-      grid-template-columns: 94px 1fr 92px;
-      gap: 12px;
-      align-items: center;
-      padding: 10px 0;
-      border-bottom: 1px solid var(--hair);
-    }
-    .forecast-line:last-child { border-bottom: 0; }
-    .forecast-line time {
-      font-weight: 900;
-      color: var(--muted);
-    }
-    .rail {
-      height: 11px;
-      position: relative;
-      background: #ece6d9;
-      border: 1px solid #cabfaa;
-    }
-    .rail i {
-      position: absolute;
-      top: -5px;
-      width: 19px;
-      height: 19px;
-      border: 2px solid var(--ink);
-      border-radius: 50%;
-      background: var(--gold);
-      transform: translateX(-50%);
-    }
-    .forecast-line strong {
-      text-align: right;
-      font-size: 15px;
-    }
-    .chart-grid {
-      display: grid;
-      grid-template-columns: 290px minmax(0, 1fr);
-      gap: 18px;
-    }
-    .graph-menu {
-      display: grid;
-      align-content: start;
-      gap: 8px;
-    }
-    .graph-menu button {
-      width: 100%;
-      padding: 12px;
-      border: 1px solid var(--line);
-      background: var(--white);
-      text-align: left;
-      font-weight: 900;
-      border-radius: 4px;
-    }
-    .graph-menu button.active {
-      background: var(--ink);
-      color: #fff;
-    }
-    .graph-stage {
-      min-height: 560px;
-      padding: 18px;
-    }
-    .graph-stage img {
-      width: 100%;
-      display: block;
-      background: #fff;
-      border: 1px solid var(--hair);
-    }
-    .graph-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 12px;
-    }
-    .data-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 14px;
-    }
-    .data-table th,
-    .data-table td {
-      padding: 13px 14px;
-      border-bottom: 1px solid var(--hair);
-      text-align: left;
-    }
-    .data-table th {
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 950;
-      background: #fbf8ef;
-    }
-    .risk-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(340px, .8fr);
-      gap: 18px;
-    }
-    .risk-score {
-      padding: 28px;
-      min-height: 260px;
-      display: grid;
-      align-content: center;
-    }
-    .risk-score span {
-      color: var(--muted);
-      font-weight: 950;
-    }
-    .risk-score strong {
-      display: block;
-      margin-top: 8px;
-      font-size: clamp(60px, 10vw, 132px);
-      line-height: .9;
-      letter-spacing: 0;
-    }
-    .risk-score p {
-      margin: 16px 0 0;
-      color: var(--muted);
-      line-height: 1.65;
-      font-weight: 750;
-    }
-    .source-list {
-      padding: 16px 18px;
-      display: grid;
-      gap: 12px;
-    }
-    .source-item {
-      display: grid;
-      grid-template-columns: 130px 1fr;
-      gap: 14px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid var(--hair);
-      word-break: break-word;
-    }
-    .source-item:last-child { border-bottom: 0; padding-bottom: 0; }
-    .source-item span {
-      color: var(--muted);
-      font-weight: 950;
-    }
-    .source-item strong {
-      font-weight: 850;
-    }
-    .agent-grid {
-      display: grid;
-      grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
-      gap: 18px;
-    }
-    textarea {
-      width: 100%;
-      min-height: 220px;
-      resize: vertical;
-      border: 0;
-      border-bottom: 2px solid var(--line);
-      background: #fff;
-      padding: 18px;
-      line-height: 1.6;
-      font-size: 16px;
-      outline: none;
-    }
-    .answer {
-      min-height: 320px;
-      margin: 0;
-      padding: 20px;
-      white-space: pre-wrap;
-      word-break: keep-all;
-      background: #17202a;
-      color: #f8fafc;
-      line-height: 1.75;
-      font-size: 15px;
-    }
-    .empty {
-      padding: 28px;
-      color: var(--muted);
-      font-weight: 900;
-    }
-    @media (max-width: 1020px) {
-      .command-bar,
-      .overview-grid,
-      .chart-grid,
-      .risk-grid,
-      .agent-grid {
-        grid-template-columns: 1fr;
-      }
-      .command-links { justify-content: flex-start; }
-      .ticker-tape { grid-template-columns: repeat(5, 180px); }
-      .quote-main { grid-template-columns: 1fr; }
-      .price-ticket {
-        justify-items: start;
-        border-left: 0;
-        border-top: 2px solid var(--line);
-      }
-      .price-ticket strong { text-align: left; }
-      .matrix { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .metric:nth-child(2) { border-right: 0; }
-      .metric:nth-child(3), .metric:nth-child(4) { border-top: 1px solid var(--hair); }
-    }
-    @media (max-width: 660px) {
-      .brand { align-items: flex-start; flex-direction: column; gap: 6px; }
-      .tabbar { grid-template-columns: 1fr; }
-      .tabbar button { border-right: 0; border-bottom: 1px solid var(--line); }
-      .tabbar button:last-child { border-bottom: 0; }
-      .matrix { grid-template-columns: 1fr; }
-      .metric { border-right: 0; border-top: 1px solid var(--hair); }
-      .metric:first-child { border-top: 0; }
-      .forecast-line { grid-template-columns: 1fr; }
-      .forecast-line strong { text-align: left; }
-      .source-item { grid-template-columns: 1fr; }
-    }
-  </style>
-</head>
-<body>
-  <div class="terminal">
-    <header class="command-bar">
-      <div class="brand">
-        <strong>Oil Market Terminal</strong>
-        <span>High-Level Programming</span>
-      </div>
-      <nav class="command-links">
-        <a class="terminal-button" href="/docs">API Docs</a>
-        <a class="terminal-button" href="/graphs">Graph Library</a>
-        <a class="terminal-button" href="/summary">JSON</a>
-        <button class="terminal-button fill" onclick="refreshData()">Refresh</button>
-      </nav>
-    </header>
-
-    <section class="ticker-tape" id="tickerTape"></section>
-
-    <main class="workspace">
-      <nav class="tabbar">
-        <button class="active" data-screen="overview">Overview</button>
-        <button data-screen="forecast">Forecast</button>
-        <button data-screen="graphs">Graphs</button>
-        <button data-screen="risk">Risk</button>
-        <button data-screen="agent">Agent</button>
-      </nav>
-
-      <section class="screen active" id="overview">
-        <div class="overview-grid">
-          <article class="board">
-            <div class="quote-main">
-              <div>
-                <h1>국내 유가<br />실시간 분석</h1>
-                <p class="quote-text" id="overviewText">최신 데이터를 불러오는 중입니다.</p>
-              </div>
-              <aside class="price-ticket">
-                <span>오늘 전국 평균</span>
-                <strong id="todayPrice">-</strong>
-                <em id="todayDelta">예측 계산 중</em>
-              </aside>
-            </div>
-            <div class="matrix" id="metricMatrix"></div>
-          </article>
-
-          <article class="board">
-            <div class="board-head">
-              <h2>7-Day Rail</h2>
-              <small id="railDate">기준일 확인 중</small>
-            </div>
-            <div class="forecast-list" id="forecastRail"></div>
-          </article>
-        </div>
-      </section>
-
-      <section class="screen" id="forecast">
-        <article class="board">
-          <div class="board-head">
-            <div>
-              <h2>Forecast Sheet</h2>
-              <small>오늘 가격 대비 7일 예측 변화</small>
-            </div>
-            <a class="terminal-button" href="/forecast">Forecast JSON</a>
-          </div>
-          <table class="data-table">
-            <thead>
-              <tr><th>날짜</th><th>예측 유가</th><th>오늘 대비</th><th>뉴스 보정률</th><th>기사 수</th></tr>
-            </thead>
-            <tbody id="forecastRows"></tbody>
-          </table>
-        </article>
-      </section>
-
-      <section class="screen" id="graphs">
-        <div class="chart-grid">
-          <aside class="graph-menu" id="graphMenu"></aside>
-          <article class="board">
-            <div class="board-head">
-              <div>
-                <h2 id="selectedGraphTitle">Graph Viewer</h2>
-                <small id="selectedGraphFile">그래프 로딩 중</small>
-              </div>
-              <a class="terminal-button" id="selectedGraphRaw" href="/graphs">PNG</a>
-            </div>
-            <div class="graph-stage" id="graphStage"></div>
-          </article>
-        </div>
-      </section>
-
-      <section class="screen" id="risk">
-        <div class="risk-grid">
-          <article class="board risk-score">
-            <span>NEWS RISK SCORE</span>
-            <strong id="riskScore">-</strong>
-            <p id="riskText">뉴스 리스크와 예측 보정률을 불러오는 중입니다.</p>
-          </article>
-          <article class="board">
-            <div class="board-head">
-              <h2>Data Sources</h2>
-              <small>수집 경로</small>
-            </div>
-            <div class="source-list" id="sourceList"></div>
-          </article>
-        </div>
-      </section>
-
-      <section class="screen" id="agent">
-        <div class="agent-grid">
-          <article class="board">
-            <div class="board-head">
-              <h2>Ask Agent</h2>
-              <small>현재 분석 결과 기반</small>
-            </div>
-            <textarea id="question">전쟁 뉴스 리스크가 유가 예측에 어떤 영향을 줘?</textarea>
-            <div style="padding: 16px 18px;">
-              <button class="terminal-button fill" style="background:#17202a;color:#fff;border-color:#17202a;" onclick="askAgent()">Run Agent</button>
-            </div>
-          </article>
-          <article class="board">
-            <div class="board-head">
-              <h2>Agent Output</h2>
-              <small>요약 답변</small>
-            </div>
-            <pre class="answer" id="agentAnswer">질문을 입력하고 Run Agent를 누르세요.</pre>
-          </article>
-        </div>
-      </section>
-    </main>
-  </div>
-
-  <script>
-    let snapshot = null;
-    let figures = [];
-    let selectedFigure = null;
-
-    function fmt(value, digits = 1) {
-      const number = Number(value);
-      if (!Number.isFinite(number)) return '-';
-      return number.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: digits });
-    }
-    function signClass(value) {
-      if (value > 0) return 'up';
-      if (value < 0) return 'down';
-      return 'flat';
-    }
-    function setScreen(name) {
-      document.querySelectorAll('.tabbar button').forEach(button => {
-        button.classList.toggle('active', button.dataset.screen === name);
-      });
-      document.querySelectorAll('.screen').forEach(screen => {
-        screen.classList.toggle('active', screen.id === name);
-      });
-    }
-    document.querySelectorAll('.tabbar button').forEach(button => {
-      button.addEventListener('click', () => setScreen(button.dataset.screen));
-    });
-    function renderTicker(data) {
-      const latest = data.latest || {};
-      const news = data.news || {};
-      const items = [
-        ['DOMESTIC', latest.domestic_price ? `${fmt(latest.domestic_price, 1)} 원/L` : '-'],
-        ['WTI', latest.wti ? `${fmt(latest.wti, 2)} $/bbl` : '-'],
-        ['BRENT', latest.brent ? `${fmt(latest.brent, 2)} $/bbl` : '-'],
-        ['USD/KRW', latest.exchange ? `${fmt(latest.exchange, 2)} 원` : '-'],
-        ['NEWS RISK', news.news_risk_score !== undefined ? Number(news.news_risk_score).toFixed(3) : '-']
-      ];
-      document.getElementById('tickerTape').innerHTML = items.map(([label, value]) => `
-        <div class="ticker-item">
-          <div class="ticker-label">${label}</div>
-          <div class="ticker-value">${value}</div>
-        </div>
-      `).join('');
-    }
-    function renderOverview(data) {
-      const latest = data.latest || {};
-      const forecast = data.forecast || [];
-      const news = data.news || {};
-      const today = Number(latest.domestic_price);
-      const last = forecast.length ? Number(forecast[forecast.length - 1].predicted_domestic_price) : today;
-      const diff = last - today;
-      const diffText = Number.isFinite(diff)
-        ? `7일 뒤 ${fmt(Math.abs(diff), 1)} 원/L ${diff >= 0 ? '상승' : '하락'}`
-        : '예측 데이터 없음';
-      document.getElementById('todayPrice').textContent = today ? `${fmt(today, 1)} 원/L` : '-';
-      document.getElementById('todayDelta').className = signClass(diff);
-      document.getElementById('todayDelta').textContent = diffText;
-      document.getElementById('overviewText').textContent = latest.date
-        ? `${latest.date} 기준 최신 데이터입니다. 국제 유가, 환율, 뉴스 리스크를 함께 반영해 향후 7일 국내 유가 흐름을 계산합니다.`
-        : '생성된 분석 데이터가 없습니다. Refresh를 실행하면 최신 데이터 수집과 예측을 다시 수행합니다.';
-      document.getElementById('railDate').textContent = latest.date ? `기준일 ${latest.date}` : '데이터 없음';
-      const metrics = [
-        ['WTI', latest.wti ? `${fmt(latest.wti, 2)} $/bbl` : '-', '국제 유가'],
-        ['Brent', latest.brent ? `${fmt(latest.brent, 2)} $/bbl` : '-', '국제 유가'],
-        ['환율', latest.exchange ? `${fmt(latest.exchange, 2)} 원` : '-', '원/달러'],
-        ['뉴스', news.article_count !== undefined ? `${news.article_count}건` : '-', `보정 ${(Number(news.forecast_adjustment_pct || 0) * 100).toFixed(2)}%`]
-      ];
-      document.getElementById('metricMatrix').innerHTML = metrics.map(([label, value, note]) => `
-        <div class="metric"><span>${label}</span><strong>${value}</strong><small>${note}</small></div>
-      `).join('');
-    }
-    function renderForecast(data) {
-      const latest = data.latest || {};
-      const forecast = data.forecast || [];
-      const today = Number(latest.domestic_price);
-      const values = forecast.map(row => Number(row.predicted_domestic_price)).filter(Number.isFinite);
-      const min = Math.min(today || 0, ...values);
-      const max = Math.max(today || 0, ...values);
-      const span = Math.max(1, max - min);
-      document.getElementById('forecastRail').innerHTML = forecast.length ? forecast.map(row => {
-        const value = Number(row.predicted_domestic_price);
-        const pos = Math.max(0, Math.min(100, ((value - min) / span) * 100));
-        return `<div class="forecast-line">
-          <time>${row.date}</time>
-          <div class="rail"><i style="left:${pos}%"></i></div>
-          <strong>${fmt(value, 1)}</strong>
-        </div>`;
-      }).join('') : '<div class="empty">예측 데이터가 없습니다.</div>';
-      document.getElementById('forecastRows').innerHTML = forecast.length ? forecast.map(row => {
-        const value = Number(row.predicted_domestic_price);
-        const diff = value - today;
-        return `<tr>
-          <td>${row.date}</td>
-          <td><strong>${fmt(value, 1)} 원/L</strong></td>
-          <td class="${signClass(diff)}">${diff >= 0 ? '+' : '-'}${fmt(Math.abs(diff), 1)} 원/L</td>
-          <td>${(Number(row.news_adjustment_pct || 0) * 100).toFixed(2)}%</td>
-          <td>${row.news_article_count || 0}</td>
-        </tr>`;
-      }).join('') : '<tr><td colspan="5">예측 데이터가 없습니다.</td></tr>';
-    }
-    function renderRisk(data) {
-      const news = data.news || {};
-      const sources = data.sources || {};
-      const meta = data.meta || {};
-      document.getElementById('riskScore').textContent = news.news_risk_score !== undefined
-        ? Number(news.news_risk_score).toFixed(3)
-        : '-';
-      document.getElementById('riskText').textContent =
-        `뉴스 기사 ${news.article_count || 0}건, 예측 보정률 ${(Number(news.forecast_adjustment_pct || 0) * 100).toFixed(2)}% 기준으로 지정학적 이벤트 영향을 반영했습니다.`;
-      const rows = [
-        ['국내 유가', sources.domestic_source_name || 'OPINET'],
-        ['국제 유가', sources.market_source_name || 'Alpha Vantage / FRED'],
-        ['뉴스', sources.news_source_name || 'Google News / GDELT'],
-        ['수집 시각', meta.collected_at || meta.last_updated || '-']
-      ];
-      document.getElementById('sourceList').innerHTML = rows.map(([key, value]) => `
-        <div class="source-item"><span>${key}</span><strong>${value}</strong></div>
-      `).join('');
-    }
-    function selectFigure(index) {
-      selectedFigure = figures[index] || figures[0] || null;
-      if (!selectedFigure) {
-        document.getElementById('graphStage').innerHTML = '<div class="empty">표시할 그래프가 없습니다.</div>';
-        return;
-      }
-      document.querySelectorAll('.graph-menu button').forEach((button, buttonIndex) => {
-        button.classList.toggle('active', buttonIndex === figures.indexOf(selectedFigure));
-      });
-      document.getElementById('selectedGraphTitle').textContent = selectedFigure.title;
-      document.getElementById('selectedGraphFile').textContent = selectedFigure.filename;
-      document.getElementById('selectedGraphRaw').href = selectedFigure.url;
-      document.getElementById('graphStage').innerHTML = `
-        <img src="${selectedFigure.url}" alt="${selectedFigure.title}" />
-        <div class="graph-actions">
-          <a class="terminal-button" href="${selectedFigure.detail_url}">크게 보기</a>
-          <a class="terminal-button" href="${selectedFigure.url}">원본 PNG</a>
-        </div>
-      `;
-    }
-    function renderFigures() {
-      document.getElementById('graphMenu').innerHTML = figures.length ? figures.map((figure, index) => `
-        <button data-index="${index}">${figure.title}</button>
-      `).join('') : '<div class="empty">생성된 그래프가 없습니다.</div>';
-      document.querySelectorAll('.graph-menu button').forEach(button => {
-        button.addEventListener('click', () => selectFigure(Number(button.dataset.index)));
-      });
-      const dashboardIndex = Math.max(0, figures.findIndex(figure => figure.filename === 'oil_price_dashboard.png'));
-      selectFigure(dashboardIndex);
-    }
-    async function loadSummary() {
-      const res = await fetch('/summary');
-      const data = await res.json();
-      snapshot = data;
-      renderTicker(data);
-      renderOverview(data);
-      renderForecast(data);
-      renderRisk(data);
-    }
-    async function loadFigures() {
-      const res = await fetch('/graphs/list');
-      figures = await res.json();
-      renderFigures();
-    }
-    async function askAgent() {
-      const question = document.getElementById('question').value;
-      const answer = document.getElementById('agentAnswer');
-      answer.textContent = '분석 중...';
-      const res = await fetch('/agent', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({question})
-      });
-      const data = await res.json();
-      answer.textContent = data.answer;
-    }
-    async function refreshData() {
-      if (!confirm('최신 데이터 수집과 예측을 다시 실행할까요?')) return;
-      const res = await fetch('/refresh', { method: 'POST' });
-      const data = await res.json();
-      alert(data.message || '완료');
-      await loadSummary();
-      await loadFigures();
-    }
-    loadSummary();
-    loadFigures();
-  </script>
-</body>
-</html>
-"""
-
-_HOME_HTML = """
-<!doctype html>
-<html lang="ko">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>유가 예측 서비스</title>
-  <style>
-    :root {
-      color-scheme: light;
-      --bg: #f7f9fc;
-      --ink: #17202a;
-      --muted: #64748b;
-      --line: #d7dee8;
-      --panel: #ffffff;
-      --blue: #9996e2;
-      --blue-soft: #f0effc;
-      --green: #087f5b;
-      --green-soft: #e7f7ef;
-      --red: #d92d20;
-      --amber: #b7791f;
-      --shadow: 0 18px 45px rgba(15, 23, 42, .08);
-    }
-    * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; }
-    body {
-      margin: 0;
-      background: var(--bg);
-      color: var(--ink);
-      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", sans-serif;
-    }
-    a { color: inherit; text-decoration: none; }
-    button, textarea { font: inherit; }
-    button { cursor: pointer; }
-    .page {
-      width: min(1240px, 100%);
-      margin: 0 auto;
-      padding: 24px clamp(16px, 4vw, 34px) 58px;
-    }
-    .hero {
-      min-height: 320px;
-      display: grid;
-      grid-template-columns: minmax(0, 1.1fr) minmax(320px, .9fr);
-      gap: 20px;
-      align-items: stretch;
-    }
-    .hero-main,
-    .panel {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      box-shadow: var(--shadow);
-    }
-    .hero-main {
-      padding: clamp(24px, 4vw, 42px);
-      display: grid;
-      align-content: space-between;
-      gap: 28px;
-    }
-    .eyebrow {
-      color: var(--blue);
-      font-size: 13px;
-      font-weight: 900;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-    }
-    h1 {
-      margin: 10px 0 0;
-      font-size: clamp(36px, 6vw, 72px);
-      line-height: 1.02;
-      letter-spacing: 0;
-    }
-    .hero-copy {
-      margin: 16px 0 0;
-      max-width: 680px;
-      color: var(--muted);
-      font-size: 17px;
-      line-height: 1.7;
-      word-break: keep-all;
-    }
-    .quick-actions {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 10px;
-    }
-    .action {
-      min-height: 74px;
-      display: grid;
-      align-content: center;
-      gap: 4px;
-      padding: 12px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fff;
-      text-align: center;
-      font-weight: 900;
-    }
-    .action span {
-      display: block;
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 750;
-    }
-    .action.primary {
-      background: var(--blue);
-      color: #fff;
-      border-color: var(--blue);
-    }
-    .action.primary span { color: rgba(255,255,255,.78); }
-    .today-box {
-      display: grid;
-      grid-template-rows: auto 1fr auto;
-      padding: 24px;
-    }
-    .today-label {
-      color: var(--muted);
-      font-size: 14px;
-      font-weight: 900;
-    }
-    .today-price {
-      align-self: center;
-      font-size: clamp(44px, 7vw, 78px);
-      line-height: 1;
-      font-weight: 950;
-      letter-spacing: 0;
-    }
-    .today-meta {
-      display: grid;
-      gap: 8px;
-      color: var(--muted);
-      font-weight: 800;
-    }
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      width: fit-content;
-      min-height: 32px;
-      padding: 0 10px;
-      border-radius: 999px;
-      background: var(--blue-soft);
-      color: var(--blue);
-      font-weight: 900;
-      font-size: 13px;
-    }
-    .section {
-      margin-top: 22px;
-    }
-    .section-head {
-      display: flex;
-      align-items: end;
-      justify-content: space-between;
-      gap: 14px;
-      margin-bottom: 12px;
-    }
-    .section-head h2 {
-      margin: 0;
-      font-size: 28px;
-      letter-spacing: 0;
-    }
-    .section-head p {
-      margin: 5px 0 0;
-      color: var(--muted);
-      font-weight: 750;
-    }
-    .link-button,
-    .solid-button {
-      min-height: 40px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      padding: 0 13px;
-      border-radius: 8px;
-      border: 1px solid var(--line);
-      background: #fff;
-      color: var(--ink);
-      font-weight: 900;
-      white-space: nowrap;
-    }
-    .solid-button {
-      border-color: var(--blue);
-      background: var(--blue);
-      color: #fff;
-    }
-    .metrics {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 12px;
-    }
-    .metric {
-      min-height: 112px;
-      padding: 18px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fff;
-    }
-    .metric span {
-      display: block;
-      color: var(--muted);
-      font-size: 13px;
-      font-weight: 900;
-    }
-    .metric strong {
-      display: block;
-      margin-top: 8px;
-      font-size: 27px;
-      letter-spacing: 0;
-    }
-    .metric small {
-      display: block;
-      margin-top: 7px;
-      color: var(--muted);
-      font-weight: 750;
-    }
-    .forecast-layout {
-      display: grid;
-      grid-template-columns: minmax(0, .95fr) minmax(520px, 1.05fr);
-      gap: 16px;
-    }
-    .graph-layout {
-      display: grid;
-      grid-template-columns: minmax(0, 1.35fr) minmax(340px, .75fr);
-      gap: 16px;
-    }
-    .panel-head {
-      padding: 16px 18px;
-      border-bottom: 1px solid var(--line);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
-    .panel-head h3 {
-      margin: 0;
-      font-size: 20px;
-    }
-    .chart-frame {
-      padding: 16px;
-    }
-    .chart-frame img {
-      width: 100%;
-      display: block;
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      background: #fff;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 14px;
-    }
-    th, td {
-      padding: 12px 14px;
-      border-bottom: 1px solid var(--line);
-      text-align: left;
-    }
-    th {
-      color: var(--muted);
-      background: #f8fafc;
-      font-size: 12px;
-      font-weight: 950;
-    }
-    .up { color: var(--red); font-weight: 950; }
-    .down { color: var(--blue); font-weight: 950; }
-    .flat { color: var(--green); font-weight: 950; }
-    .reason-cell {
-      min-width: 260px;
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.45;
-      word-break: keep-all;
-    }
-    .graph-list {
-      display: grid;
-      gap: 8px;
-      padding: 14px;
-      max-height: 640px;
-      overflow: auto;
-    }
-    .graph-list button {
-      width: 100%;
-      min-height: 46px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fff;
-      text-align: left;
-      padding: 10px 12px;
-      font-weight: 900;
-      color: var(--ink);
-    }
-    .graph-list button.active {
-      border-color: var(--blue);
-      background: var(--blue-soft);
-      color: var(--blue);
-    }
-    .status-line {
-      margin-top: 12px;
-      padding: 12px 14px;
-      border: 1px solid #bee3d4;
-      background: var(--green-soft);
-      color: var(--green);
-      border-radius: 8px;
-      font-weight: 850;
-      word-break: keep-all;
-    }
-    @media (max-width: 980px) {
-      .hero,
-      .forecast-layout,
-      .graph-layout {
-        grid-template-columns: 1fr;
-      }
-      .quick-actions,
-      .metrics {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-    }
-    @media (max-width: 620px) {
-      .quick-actions,
-      .metrics {
-        grid-template-columns: 1fr;
-      }
-      .section-head {
-        align-items: flex-start;
-        flex-direction: column;
-      }
-    }
-  </style>
-</head>
-<body>
-  <main class="page">
-    <section class="hero">
-      <div class="hero-main">
-        <div>
-          <div class="eyebrow">Oil Price Forecast</div>
-          <h1>국내 유가 예측</h1>
-          <p class="hero-copy">
-            오늘 전국 휘발유 평균가, 국제 유가, 환율, 뉴스 리스크를 한 화면에서 확인합니다.
-            아래 버튼만 누르면 필요한 분석으로 바로 이동합니다.
-          </p>
-          <div class="status-line" id="freshStatus">최신 데이터 확인 중...</div>
-        </div>
-        <nav class="quick-actions">
-          <a class="action primary" href="#today">오늘 유가<span>현재 가격</span></a>
-          <a class="action" href="#forecast">7일 예측<span>미래 가격</span></a>
-          <a class="action" href="#graphs">그래프 보기<span>전체 차트</span></a>
-          <button class="action" onclick="refreshData()">최신화<span>데이터 재수집</span></button>
-        </nav>
-      </div>
-
-      <aside class="panel today-box" id="today">
-        <div>
-          <div class="today-label">오늘 전국 휘발유 평균가</div>
-          <span class="badge" id="baseDate">기준일 확인 중</span>
-        </div>
-        <div class="today-price" id="todayPrice">-</div>
-        <div class="today-meta">
-          <span id="forecastDelta">7일 예측 계산 중</span>
-          <span id="sourceName">데이터 출처 확인 중</span>
-        </div>
-      </aside>
-    </section>
-
-    <section class="section">
-      <div class="section-head">
-        <div>
-          <h2>핵심 지표</h2>
-          <p>국내 유가 예측에 들어가는 주요 입력값입니다.</p>
-        </div>
-        <a class="link-button" href="/summary">JSON 보기</a>
-      </div>
-      <div class="metrics" id="metricGrid"></div>
-    </section>
-
-    <section class="section" id="forecast">
-      <div class="section-head">
-        <div>
-          <h2>7일 예측</h2>
-          <p>오늘 가격에서 다음 7일 동안 어떻게 움직이는지 보여줍니다.</p>
-        </div>
-        <a class="link-button" href="/forecast">예측 데이터</a>
-      </div>
-      <div class="forecast-layout">
-        <article class="panel">
-          <div class="panel-head">
-            <h3>예측 그래프</h3>
-            <a class="link-button" id="dashboardPng" href="/figures/oil_price_dashboard.png">PNG</a>
-          </div>
-          <div class="chart-frame" id="mainChart"></div>
-        </article>
-        <article class="panel">
-          <div class="panel-head"><h3>예측표</h3></div>
-          <table>
-            <thead><tr><th>날짜</th><th>예측</th><th>변화</th><th>변화 이유</th></tr></thead>
-            <tbody id="forecastRows"></tbody>
-          </table>
-        </article>
-      </div>
-    </section>
-
-    <section class="section" id="graphs">
-      <div class="section-head">
-        <div>
-          <h2>그래프</h2>
-          <p>보고서에 들어가는 그래프를 바로 선택해서 확인합니다.</p>
-        </div>
-        <a class="link-button" href="/graphs">전체 그래프 페이지</a>
-      </div>
-      <div class="graph-layout">
-        <article class="panel">
-          <div class="panel-head">
-            <h3 id="selectedGraphTitle">그래프 선택</h3>
-            <a class="link-button" id="selectedGraphRaw" href="/graphs">원본</a>
-          </div>
-          <div class="chart-frame" id="graphStage"></div>
-        </article>
-        <aside class="panel">
-          <div class="panel-head"><h3>그래프 목록</h3></div>
-          <div class="graph-list" id="graphList"></div>
-        </aside>
-      </div>
-    </section>
-
-  </main>
-
-  <script>
-    let figures = [];
-    let selectedFigureIndex = 0;
-
-    function fmt(value, digits = 1) {
-      const number = Number(value);
-      if (!Number.isFinite(number)) return '-';
-      return number.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: digits });
-    }
-    function changeClass(value) {
-      if (value > 0) return 'up';
-      if (value < 0) return 'down';
-      return 'flat';
-    }
-    function withCacheBust(url) {
-      const sep = url.includes('?') ? '&' : '?';
-      return `${url}${sep}client=${Date.now()}`;
-    }
-    function renderSummary(data) {
-      const latest = data.latest || {};
-      const forecast = data.forecast || [];
-      const news = data.news || {};
-      const sources = data.sources || {};
-      const meta = data.meta || {};
-      const todayPrice = Number(latest.domestic_price);
-      const lastForecast = forecast.length ? Number(forecast[forecast.length - 1].predicted_domestic_price) : todayPrice;
-      const diff = lastForecast - todayPrice;
-      const isCurrent = latest.date === new Date().toISOString().slice(0, 10);
-
-      document.getElementById('freshStatus').textContent = isCurrent
-        ? `최신 데이터입니다. 현재 기준일: ${latest.date}`
-        : `데이터 기준일: ${latest.date || '-'} / 서버가 최신화를 시도합니다.`;
-      document.getElementById('baseDate').textContent = latest.date ? `${latest.date} 기준` : '데이터 없음';
-      document.getElementById('todayPrice').textContent = todayPrice ? `${fmt(todayPrice, 1)} 원/L` : '-';
-      document.getElementById('forecastDelta').className = changeClass(diff);
-      document.getElementById('forecastDelta').textContent = Number.isFinite(diff)
-        ? `7일 뒤 ${fmt(Math.abs(diff), 1)} 원/L ${diff >= 0 ? '상승' : '하락'} 전망`
-        : '예측 데이터 없음';
-      document.getElementById('sourceName').textContent = sources.domestic_source_name || 'OPINET';
-
-      const metrics = [
-        ['WTI', latest.wti ? `${fmt(latest.wti, 2)} $/bbl` : '-', '국제 유가'],
-        ['Brent', latest.brent ? `${fmt(latest.brent, 2)} $/bbl` : '-', '국제 유가'],
-        ['원/달러', latest.exchange ? `${fmt(latest.exchange, 2)} 원` : '-', '환율'],
-        ['뉴스 리스크', news.news_risk_score !== undefined ? Number(news.news_risk_score).toFixed(3) : '-', `${news.article_count || 0}개 기사`]
-      ];
-      document.getElementById('metricGrid').innerHTML = metrics.map(([label, value, note]) => `
-        <div class="metric"><span>${label}</span><strong>${value}</strong><small>${note}</small></div>
-      `).join('');
-      document.getElementById('forecastRows').innerHTML = forecast.length ? forecast.map(row => {
-        const value = Number(row.predicted_domestic_price);
-        const rowDiff = value - todayPrice;
-        return `<tr>
-          <td>${row.date}</td>
-          <td><strong>${fmt(value, 1)}</strong></td>
-          <td class="${changeClass(rowDiff)}">${rowDiff >= 0 ? '+' : '-'}${fmt(Math.abs(rowDiff), 1)}</td>
-          <td class="reason-cell">${row.reason || '최근 유가와 외부 지표 흐름을 반영한 예측입니다.'}</td>
-        </tr>`;
-      }).join('') : '<tr><td colspan="4">예측 데이터가 없습니다.</td></tr>';
-
-      if (figures.length) renderMainChart();
-    }
-    function renderMainChart() {
-      const dashboard = figures.find(figure => figure.filename === 'oil_price_dashboard.png') || figures[0];
-      if (!dashboard) return;
-      document.getElementById('dashboardPng').href = dashboard.url;
-      document.getElementById('mainChart').innerHTML = `<img src="${withCacheBust(dashboard.url)}" alt="${dashboard.title}" />`;
-    }
-    function renderFigures() {
-      const list = document.getElementById('graphList');
-      list.innerHTML = figures.length ? figures.map((figure, index) => `
-        <button class="${index === selectedFigureIndex ? 'active' : ''}" data-index="${index}">${figure.title}</button>
-      `).join('') : '<div style="padding:14px;color:#64748b;font-weight:850;">그래프가 없습니다.</div>';
-      list.querySelectorAll('button').forEach(button => {
-        button.addEventListener('click', () => selectFigure(Number(button.dataset.index)));
-      });
-      selectFigure(selectedFigureIndex);
-      renderMainChart();
-    }
-    function selectFigure(index) {
-      if (!figures.length) return;
-      selectedFigureIndex = Math.max(0, Math.min(index, figures.length - 1));
-      const figure = figures[selectedFigureIndex];
-      document.getElementById('selectedGraphTitle').textContent = figure.title;
-      document.getElementById('selectedGraphRaw').href = figure.url;
-      document.getElementById('graphStage').innerHTML = `<img src="${withCacheBust(figure.url)}" alt="${figure.title}" />`;
-      document.querySelectorAll('#graphList button').forEach((button, idx) => {
-        button.classList.toggle('active', idx === selectedFigureIndex);
-      });
-    }
-    async function loadSummary() {
-      const response = await fetch(`/summary?client=${Date.now()}`);
-      const data = await response.json();
-      renderSummary(data);
-    }
-    async function loadFigures() {
-      const response = await fetch(`/graphs/list?client=${Date.now()}`);
-      figures = await response.json();
-      const dashboardIndex = figures.findIndex(figure => figure.filename === 'oil_price_dashboard.png');
-      selectedFigureIndex = dashboardIndex >= 0 ? dashboardIndex : 0;
-      renderFigures();
-    }
-    async function refreshData() {
-      const status = document.getElementById('freshStatus');
-      status.textContent = '최신 데이터 수집, 그래프 재생성 중입니다...';
-      const response = await fetch('/refresh', { method: 'POST' });
-      const data = await response.json();
-      status.textContent = data.message || '최신화 완료';
-      await loadSummary();
-      await loadFigures();
-    }
-    loadSummary().then(loadFigures);
-  </script>
-</body>
-</html>
-"""
