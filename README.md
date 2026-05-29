@@ -1,7 +1,7 @@
 # High-Level Programming Oil Price Forecast
 
 국내 휘발유 가격을 대상으로 WTI, Brent, 원/달러 환율, 뉴스 리스크를 함께 반영해
-향후 7일 유가를 예측하고 웹 대시보드에서 검증할 수 있는 발표용 분석 프로젝트입니다.
+향후 7일 유가를 예측하고 웹 대시보드에서 검증할 수 있는 분석 프로젝트입니다.
 
 ## Project Goal
 
