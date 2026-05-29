@@ -524,12 +524,12 @@ def _render_web_template(template_name: str, **values: str) -> str:
 
 @app.get("/", response_class=HTMLResponse, tags=["homepage"])
 def homepage() -> FileResponse:
-    return _web_file("index.html")
+    return _web_file("dashboard.html")
 
 
 @app.get("/home", response_class=HTMLResponse, include_in_schema=False)
 def home_alias() -> FileResponse:
-    return _web_file("index.html")
+    return _web_file("dashboard.html")
 
 
 @app.get("/favicon.ico", include_in_schema=False)
@@ -561,7 +561,7 @@ def graph_list() -> list[dict[str, str]]:
 
 @app.get("/graphs", response_class=HTMLResponse, tags=["graphs"])
 def graph_gallery() -> FileResponse:
-    return _web_file("graphs.html")
+    return _web_file("graph_gallery.html")
 
 
 @app.get("/graphs/{filename}", response_class=HTMLResponse, tags=["graphs"])
@@ -573,7 +573,7 @@ def graph_detail(filename: str) -> HTMLResponse:
         return HTMLResponse("<h1>그래프를 찾을 수 없습니다</h1><p><a href='/graphs'>전체 그래프로 돌아가기</a></p>", status_code=404)
     return HTMLResponse(
         _render_web_template(
-            "graph-detail.html",
+            "graph_detail.html",
             title=figure["title"],
             url=figure["url"],
             filename=figure["filename"],
@@ -583,7 +583,7 @@ def graph_detail(filename: str) -> HTMLResponse:
 
 @app.get("/docs", response_class=HTMLResponse, include_in_schema=False)
 def simple_docs() -> FileResponse:
-    return _web_file("docs.html")
+    return _web_file("api_docs.html")
 
 
 @app.post("/refresh", response_model=RefreshResponse, tags=["analysis"])

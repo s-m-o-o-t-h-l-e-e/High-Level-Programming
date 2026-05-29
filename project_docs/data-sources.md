@@ -4,7 +4,7 @@
 
 - 주 출처: OPINET 전국 평균가격 API
 - 사용 목적: 국내 휘발유 평균 가격의 기준값 및 예측 대상
-- 저장 위치: `backend/outputs/raw_oil_project.csv`
+- 저장 위치: `oil_forecast_service/outputs/raw_oil_project.csv`
 
 ## 국제 유가
 
@@ -37,7 +37,7 @@
 ## 산출 파일
 
 ```text
-backend/outputs/
+oil_forecast_service/outputs/
 ├── online_oil_dataset.csv
 ├── raw_oil_project.csv
 ├── processed_oil_project.csv

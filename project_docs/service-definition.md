@@ -27,7 +27,7 @@
 
 ## 서버 책임
 
-`backend/api`는 다음 책임을 갖습니다.
+`oil_forecast_service/api`는 다음 책임을 갖습니다.
 
 - 온라인 데이터 수집
 - 전처리 및 스케일링
@@ -36,15 +36,15 @@
 - 그래프 저장
 - API 제공
 
-`backend/web`은 웹 화면을 담당합니다.
+`oil_forecast_service/web`은 웹 화면을 담당합니다.
 
-- 커스텀 docs 화면
+- 커스텀 API Docs 화면
 - 그래프 갤러리 화면
 - 공통 CSS와 JavaScript
 
 ## 결과물 책임
 
-`backend/outputs`는 서버와 웹 화면에서 바로 사용하는 최신 분석 산출물을 보관합니다.
+`oil_forecast_service/outputs`는 서버와 웹 화면에서 바로 사용하는 최신 분석 산출물을 보관합니다.
 
 - CSV 분석 결과
 - 평가 요약

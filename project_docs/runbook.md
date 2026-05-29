@@ -4,25 +4,25 @@
 
 ```bash
 cd High-Level-Programming
-python3 server.py
+python3 run_server.py
 ```
 
 브라우저에서 접속:
 
 ```text
-http://127.0.0.1:8001
+http://127.0.0.1:8000
 ```
 
 ## 2. API 문서 확인
 
 ```text
-http://127.0.0.1:8001/docs
+http://127.0.0.1:8000/docs
 ```
 
 ## 3. 전체 그래프 확인
 
 ```text
-http://127.0.0.1:8001/graphs
+http://127.0.0.1:8000/graphs
 ```
 
 ## 4. 최신 데이터 갱신
@@ -35,10 +35,10 @@ http://127.0.0.1:8001/graphs
 
 ### Address already in use
 
-이미 8001번 포트에서 서버가 실행 중입니다.
+이미 8000번 포트에서 서버가 실행 중입니다.
 
 ```bash
-lsof -ti :8001
+lsof -ti :8000
 kill <PID>
 ```
 
@@ -49,7 +49,7 @@ kill <PID>
 아래 경로에 PNG 파일이 있는지 확인합니다.
 
 ```text
-backend/outputs/figures
+oil_forecast_service/outputs/figures
 ```
 
 없으면 `/refresh`를 실행하거나 기존 산출물을 다시 복사합니다.

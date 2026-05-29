@@ -15,14 +15,14 @@
 ## Structure
 
 ```text
-server.py                  FastAPI 로컬 서버 실행 파일
-oil_price_project.py       CLI 방식 분석/예측 실행 진입점
-backend/                  FastAPI 로컬 서버와 유가 예측 파이프라인
-backend/api/              데이터 수집, 전처리, EDA, 모델링, 예측 API
-backend/web/              웹 화면 HTML, CSS, JavaScript
-backend/models/           학습된 LSTM 모델과 스케일러
-backend/outputs/          최신 CSV, 예측표, 그래프 산출물
-docs/                     서비스 정의, 데이터 출처, 실행 가이드
+run_server.py                 FastAPI 로컬 서버 실행 파일
+run_pipeline.py               CLI 방식 분석/예측 실행 진입점
+oil_forecast_service/         FastAPI 로컬 서버와 유가 예측 파이프라인
+oil_forecast_service/api/     데이터 수집, 전처리, EDA, 모델링, 예측 API
+oil_forecast_service/web/     웹 화면 HTML, CSS, JavaScript
+oil_forecast_service/models/  학습된 LSTM 모델과 스케일러
+oil_forecast_service/outputs/ 최신 CSV, 예측표, 그래프 산출물
+project_docs/                 서비스 정의, 데이터 출처, 실행 가이드
 ```
 
 ## Main Features
@@ -41,19 +41,19 @@ docs/                     서비스 정의, 데이터 출처, 실행 가이드
 
 ```bash
 cd "term project"
-python3 server.py
+python3 run_server.py
 ```
 
 브라우저에서 아래 주소로 접속합니다.
 
 ```text
-http://127.0.0.1:8001
+http://127.0.0.1:8000
 ```
 
 포트가 이미 사용 중이면 원하는 포트로 직접 실행합니다.
 
 ```bash
-uvicorn backend.api.app:app --host 127.0.0.1 --port 8001
+uvicorn oil_forecast_service.api.api_server:app --host 127.0.0.1 --port 8001
 ```
 
 이 경우 브라우저 주소는 다음과 같습니다.
@@ -89,13 +89,13 @@ http://127.0.0.1:8001
 
 ```bash
 cd "term project"
-python3 oil_price_project.py --mode forecast --device auto --no-gui
+python3 run_pipeline.py --mode forecast --device auto --no-gui
 ```
 
 전체 파이프라인을 다시 돌릴 때는 다음 명령을 사용합니다.
 
 ```bash
-python3 oil_price_project.py --mode all --epochs 30 --device auto --no-gui
+python3 run_pipeline.py --mode all --epochs 30 --device auto --no-gui
 ```
 
 사용 가능한 모드:
@@ -112,14 +112,14 @@ python3 oil_price_project.py --mode all --epochs 30 --device auto --no-gui
 
 | File | 내용 |
 | --- | --- |
-| `backend/outputs/raw_oil_project.csv` | 원본 분석 데이터 |
-| `backend/outputs/processed_oil_project.csv` | 모델 입력용 전처리 데이터 |
-| `backend/outputs/seven_day_forecast.csv` | 향후 7일 예측표 |
-| `backend/outputs/news_articles.csv` | 뉴스 수집 결과 |
-| `backend/outputs/news_signal.csv` | 뉴스 리스크 점수 |
-| `backend/outputs/model_metrics.csv` | 모델 평가 결과 |
-| `backend/models/oil_project_lstm.keras` | 학습된 LSTM 모델 |
-| `backend/models/oil_project_scaler.pkl` | 스케일러 |
+| `oil_forecast_service/outputs/raw_oil_project.csv` | 원본 분석 데이터 |
+| `oil_forecast_service/outputs/processed_oil_project.csv` | 모델 입력용 전처리 데이터 |
+| `oil_forecast_service/outputs/seven_day_forecast.csv` | 향후 7일 예측표 |
+| `oil_forecast_service/outputs/news_articles.csv` | 뉴스 수집 결과 |
+| `oil_forecast_service/outputs/news_signal.csv` | 뉴스 리스크 점수 |
+| `oil_forecast_service/outputs/model_metrics.csv` | 모델 평가 결과 |
+| `oil_forecast_service/models/oil_project_lstm.keras` | 학습된 LSTM 모델 |
+| `oil_forecast_service/models/oil_project_scaler.pkl` | 스케일러 |
 
 ## Endpoint Summary
 
@@ -142,7 +142,7 @@ python3 oil_price_project.py --mode all --epochs 30 --device auto --no-gui
 
 ## Graph Outputs
 
-`backend/outputs/figures`에서 아래 그래프를 확인할 수 있습니다.
+`oil_forecast_service/outputs/figures`에서 아래 그래프를 확인할 수 있습니다.
 
 - 유가추이 1주
 - 유가추이 1개월
@@ -167,10 +167,10 @@ python3 oil_price_project.py --mode all --epochs 30 --device auto --no-gui
 - 거시 지표: 원/달러 환율
 - 뉴스/이벤트: Google News RSS, GDELT, AI Hub CSV 연동 구조
 
-자세한 내용은 [데이터 출처 문서](docs/data-sources.md)를 참고하세요.
+자세한 내용은 [데이터 출처 문서](project_docs/data-sources.md)를 참고하세요.
 
 ## Documents
 
-- [서비스 정의서](docs/service-definition.md)
-- [데이터 출처 및 수집 방식](docs/data-sources.md)
-- [실행 가이드](docs/runbook.md)
+- [서비스 정의서](project_docs/service-definition.md)
+- [데이터 출처 및 수집 방식](project_docs/data-sources.md)
+- [실행 가이드](project_docs/runbook.md)
