@@ -171,7 +171,7 @@ def score_news_articles(articles: list[dict]) -> tuple[pd.DataFrame, dict]:
     volume_boost = math.log1p(len(article_df)) / math.log1p(75)
     net_total = escalation_total - deescalation_total
     news_risk_score = max(-1.0, min(1.0, (net_total / 12.0) * volume_boost))
-    forecast_adjustment_pct = news_risk_score * 0.035
+    forecast_adjustment_pct = news_risk_score * 0.0025
 
     signal = {
         "downloaded_at": datetime.now().isoformat(timespec="seconds"),

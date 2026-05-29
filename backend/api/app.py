@@ -101,6 +101,10 @@ def _figure_files() -> list[dict[str, str]]:
         "event_window_changes.png": "사건 전후 유가 변동",
         "scatter_wti_domestic.png": "WTI-국내 유가 산점도",
         "histogram_daily_returns.png": "일간 변동률 히스토그램",
+        "boxplot_price_distribution.png": "가격 분포 박스플롯",
+        "bar_recent_changes.png": "최근 일간 변화 막대그래프",
+        "kde_return_distribution.png": "일간 변동률 밀도 그래프",
+        "violin_market_distribution.png": "시장 지표 바이올린 플롯",
         "correlation_heatmap.png": "상관관계 히트맵",
     }
     order = {
@@ -111,10 +115,14 @@ def _figure_files() -> list[dict[str, str]]:
         "seven_day_forecast.png": 50,
         "oil_price_dashboard.png": 60,
         "histogram_daily_returns.png": 70,
-        "scatter_wti_domestic.png": 80,
-        "eda_overview.png": 90,
-        "event_window_changes.png": 100,
-        "correlation_heatmap.png": 110,
+        "bar_recent_changes.png": 80,
+        "scatter_wti_domestic.png": 90,
+        "boxplot_price_distribution.png": 100,
+        "kde_return_distribution.png": 110,
+        "violin_market_distribution.png": 120,
+        "eda_overview.png": 130,
+        "event_window_changes.png": 140,
+        "correlation_heatmap.png": 150,
     }
     figure_paths = sorted(PATHS.figures.glob("*.png"), key=lambda path: (order.get(path.name, 999), path.name))
     for path in figure_paths:
@@ -202,32 +210,93 @@ def _forecast_reason(
     exchange = latest.get("exchange")
 
     if abs(today_diff) < 0.05:
-        movement = "오늘과 거의 비슷한 보합권으로 예상됩니다"
+        movement = "오늘과 거의 비슷한 보합권으로 예상됩니다."
     elif today_diff > 0 and day_diff >= 0:
-        movement = "오늘보다 높고 전일 예측보다도 올라 상승 흐름으로 예상됩니다"
+        movement = "오늘보다 높고 전일 예측보다도 올라 상승 흐름으로 예상됩니다."
     elif today_diff > 0 and day_diff < 0:
-        movement = "오늘보다는 높지만 전일 예측보다 낮아 상승폭이 줄어드는 조정 구간으로 보입니다"
+        movement = "오늘보다는 높지만 전일 예측보다 낮아 상승폭이 줄어드는 조정 구간으로 보입니다."
     elif today_diff < 0 and day_diff <= 0:
-        movement = "오늘보다 낮고 전일 예측보다도 내려 하락 흐름으로 예상됩니다"
+        movement = "오늘보다 낮고 전일 예측보다도 내려 하락 흐름으로 예상됩니다."
     else:
-        movement = "오늘보다는 낮지만 전일 예측보다 올라 단기 반등 구간으로 보입니다"
+        movement = "오늘보다는 낮지만 전일 예측보다 올라 단기 반등 구간으로 보입니다."
 
-    risk_text = ""
+    news_text = ""
     if news_count > 0 and abs(news_adjustment) > 0:
-        risk_text = (
-            f"뉴스 {news_count}건은 예측값을 올리는 방향으로 {abs(news_adjustment) * 100:.2f}% 보정했습니다."
-            if news_adjustment > 0
-            else f"뉴스 {news_count}건은 예측값을 낮추는 방향으로 {abs(news_adjustment) * 100:.2f}% 보정했습니다."
+        news_direction = "상승 압력" if news_adjustment > 0 else "하락 압력"
+        news_text = f"최근 뉴스 {news_count}건의 지정학적 리스크 신호는 단기 유가에 {news_direction}으로 반영됐습니다."
+    elif news_count > 0:
+        news_text = f"최근 뉴스 {news_count}건은 뚜렷한 방향성보다 관망 신호에 가깝게 반영됐습니다."
+
+    exchange_text = ""
+    exchange_level = float(exchange) if exchange else None
+    if exchange_level is not None:
+        if exchange_level >= 1450:
+            exchange_text = (
+                f"원/달러 환율이 {exchange_level:,.2f}원으로 높은 구간이라 원유 수입 비용 부담이 커져 "
+                "국내 유가 하방을 제한할 수 있습니다."
+            )
+        elif exchange_level <= 1300:
+            exchange_text = (
+                f"원/달러 환율이 {exchange_level:,.2f}원으로 비교적 낮아 수입 비용 부담이 완화되어 "
+                "국내 유가 상승 압력을 줄일 수 있습니다."
+            )
+        else:
+            exchange_text = (
+                f"원/달러 환율 {exchange_level:,.2f}원은 수입 비용 변수로 반영됐지만, "
+                "단기 방향성은 뉴스 리스크와 국제유가 흐름의 영향이 더 큽니다."
+            )
+
+    oil_text = ""
+    if wti and brent:
+        spread = float(brent) - float(wti)
+        oil_text = f"WTI {float(wti):.2f}, Brent {float(brent):.2f}달러 수준의 국제유가 흐름도 함께 반영했습니다."
+        if spread >= 4:
+            oil_text += " Brent가 WTI보다 높아 글로벌 원유 수급 부담이 남아 있는 구간입니다."
+        elif spread <= 1:
+            oil_text += " 두 지표 간 격차가 작아 국제유가 방향성은 비교적 중립적으로 해석됩니다."
+
+    balance_text = ""
+    if news_adjustment < 0 and exchange_level is not None and exchange_level >= 1450:
+        balance_text = (
+            "따라서 뉴스 리스크는 가격을 낮추는 쪽으로 작용하지만, 높은 환율이 수입 비용을 밀어 올려 "
+            "하락폭은 제한되는 구조입니다."
+        )
+    elif news_adjustment > 0 and exchange_level is not None and exchange_level >= 1450:
+        balance_text = "뉴스 리스크와 높은 환율이 같은 방향으로 작용해 국내 유가 상승 가능성을 키우는 구조입니다."
+    elif news_adjustment > 0 and exchange_level is not None and exchange_level <= 1300:
+        balance_text = "뉴스 리스크는 상승 요인이지만 낮은 환율이 수입 비용 부담을 줄여 상승폭을 일부 완화합니다."
+    elif news_adjustment < 0 and exchange_level is not None and exchange_level <= 1300:
+        balance_text = "뉴스 리스크와 낮은 환율이 모두 부담 완화 쪽으로 작용해 하락 가능성이 더 크게 반영됐습니다."
+
+    hypothesis_text = ""
+    if news_adjustment < 0 and exchange_level is not None and exchange_level >= 1450:
+        hypothesis_text = (
+            "현재 가설은 '지정학적 뉴스가 완화 신호를 보이더라도 고환율 때문에 국내 휘발유 가격은 "
+            "급락하지 않고 완만하게 조정된다'입니다."
+        )
+    elif news_adjustment > 0 and exchange_level is not None and exchange_level >= 1450:
+        hypothesis_text = (
+            "현재 가설은 '지정학적 긴장과 고환율이 동시에 작용하면 국제유가 상승분이 국내 가격에 "
+            "더 빠르게 전가될 수 있다'입니다."
+        )
+    elif news_adjustment > 0:
+        hypothesis_text = (
+            "현재 가설은 '뉴스 리스크가 단기 불확실성을 키워 국내 유가에 제한적인 상승 압력을 만든다'입니다."
+        )
+    elif news_adjustment < 0:
+        hypothesis_text = (
+            "현재 가설은 '뉴스 리스크 완화가 국제유가 부담을 낮추며 국내 유가도 완만히 내려갈 수 있다'입니다."
+        )
+    elif exchange_level is not None and exchange_level >= 1450:
+        hypothesis_text = (
+            "현재 가설은 '뉴스 방향성이 약해도 높은 환율이 수입 비용을 높여 국내 유가 하락을 제한한다'입니다."
+        )
+    else:
+        hypothesis_text = (
+            "현재 가설은 '뚜렷한 외부 충격이 없으면 국내 유가는 최근 평균 흐름을 따라 완만하게 움직인다'입니다."
         )
 
-    market_parts = []
-    if wti and brent:
-        market_parts.append(f"WTI {wti:.2f}, Brent {brent:.2f}")
-    if exchange:
-        market_parts.append(f"원/달러 {exchange:,.2f}원")
-    market_text = f"입력 지표는 {', '.join(market_parts)}입니다." if market_parts else ""
-
-    return " ".join(text for text in [movement, risk_text, market_text] if text)
+    return " ".join(text for text in [movement, hypothesis_text, news_text, exchange_text, oil_text, balance_text] if text)
 
 
 def _latest_snapshot() -> dict[str, Any]:
@@ -261,11 +330,19 @@ def _latest_snapshot() -> dict[str, Any]:
                 "predicted_domestic_price": predicted,
                 "news_adjustment_pct": round(float(item.get("news_adjustment_pct", 0)), 4),
                 "news_article_count": int(item.get("news_article_count", 0)),
+                "raw_lstm_price": round(float(item["raw_lstm_price"]), 2) if "raw_lstm_price" in item else None,
+                "baseline_price": round(float(item["baseline_price"]), 2) if "baseline_price" in item else None,
+                "daily_change_cap_won": round(float(item["daily_change_cap_won"]), 2) if "daily_change_cap_won" in item else None,
+                "lstm_blend_weight": round(float(item["lstm_blend_weight"]), 4) if "lstm_blend_weight" in item else None,
             }
             forecast_rows.append(
                 {
                     "date": str(pd.Timestamp(item["date"]).date()),
                     "predicted_domestic_price": predicted,
+                    "raw_lstm_price": normalized_item["raw_lstm_price"],
+                    "baseline_price": normalized_item["baseline_price"],
+                    "daily_change_cap_won": normalized_item["daily_change_cap_won"],
+                    "lstm_blend_weight": normalized_item["lstm_blend_weight"],
                     "news_risk_score": round(float(item.get("news_risk_score", 0)), 4),
                     "news_adjustment_pct": normalized_item["news_adjustment_pct"],
                     "news_article_count": normalized_item["news_article_count"],
@@ -393,17 +470,19 @@ _DOCS_HTML = """
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>유가 예측 API 실행</title>
+  <title>유가 분석 API Docs</title>
   <style>
     :root {
       color-scheme: light;
-      --bg: #f6f8fb;
+      --bg: #f5f6fb;
       --ink: #162033;
-      --muted: #64748b;
-      --line: #dbe2ea;
+      --muted: #667085;
+      --line: #d9dee8;
       --panel: #ffffff;
-      --blue: #9996e2;
+      --accent: #9996e2;
+      --accent-soft: #f0effc;
       --green: #07855f;
+      --dark: #111827;
     }
     * { box-sizing: border-box; }
     body {
@@ -413,93 +492,89 @@ _DOCS_HTML = """
       font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", sans-serif;
     }
     a { color: inherit; text-decoration: none; }
-    button, textarea { font: inherit; }
-    .wrap {
-      width: min(1120px, 100%);
-      margin: 0 auto;
-      padding: 30px clamp(16px, 4vw, 34px) 54px;
-    }
-    header {
+    button { font: inherit; cursor: pointer; }
+    .layout {
+      min-height: 100vh;
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 18px;
-      align-items: end;
-      margin-bottom: 18px;
+      grid-template-columns: 310px minmax(0, 1fr);
     }
-    h1 {
-      margin: 0;
-      font-size: clamp(34px, 6vw, 62px);
-      line-height: 1.02;
+    aside {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      padding: 24px 18px;
+      background: #fff;
+      border-right: 1px solid var(--line);
+      overflow: auto;
+    }
+    .brand {
+      padding: 4px 4px 20px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 16px;
+    }
+    .brand strong {
+      display: block;
+      font-size: 25px;
+      line-height: 1.15;
       letter-spacing: 0;
     }
-    .lead {
-      margin: 12px 0 0;
-      color: var(--muted);
-      font-size: 17px;
-      line-height: 1.65;
-      word-break: keep-all;
-    }
-    .top-links {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      justify-content: flex-end;
-    }
-    .link,
-    .run {
-      min-height: 42px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      padding: 0 14px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fff;
-      color: var(--ink);
-      font-weight: 900;
-      cursor: pointer;
-    }
-    .run {
-      border-color: var(--blue);
-      background: var(--blue);
-      color: #fff;
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 14px;
-    }
-    .card {
-      min-height: 182px;
-      display: grid;
-      align-content: space-between;
-      gap: 14px;
-      padding: 18px;
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      box-shadow: 0 14px 34px rgba(15, 23, 42, .07);
-    }
-    .card h2 {
-      margin: 0;
-      font-size: 22px;
-    }
-    .card p {
-      margin: 8px 0 0;
+    .brand span {
+      display: block;
+      margin-top: 8px;
       color: var(--muted);
       line-height: 1.55;
       font-weight: 750;
       word-break: keep-all;
     }
+    .nav-links {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .nav-links a {
+      min-height: 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-weight: 900;
+      background: #fff;
+    }
+    .endpoint-list {
+      display: grid;
+      gap: 8px;
+    }
+    .endpoint {
+      width: 100%;
+      display: grid;
+      gap: 5px;
+      padding: 13px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      text-align: left;
+      color: var(--ink);
+    }
+    .endpoint.active {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      box-shadow: inset 4px 0 0 var(--accent);
+    }
+    .endpoint small {
+      color: var(--muted);
+      font-weight: 800;
+    }
     .method {
       display: inline-flex;
       width: fit-content;
-      min-height: 28px;
+      min-height: 25px;
       align-items: center;
-      padding: 0 9px;
+      padding: 0 8px;
       border-radius: 999px;
-      background: #f0effc;
-      color: var(--blue);
+      background: var(--accent-soft);
+      color: var(--accent);
       font-size: 12px;
       font-weight: 950;
     }
@@ -507,136 +582,294 @@ _DOCS_HTML = """
       background: #e7f7ef;
       color: var(--green);
     }
-    textarea {
-      width: 100%;
-      min-height: 104px;
-      resize: vertical;
+    main {
+      min-width: 0;
+      padding: 30px clamp(18px, 4vw, 46px) 54px;
+    }
+    header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(34px, 6vw, 58px);
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+    .lead {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.65;
+      font-weight: 750;
+      word-break: keep-all;
+    }
+    .status-pill {
+      min-height: 38px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 12px;
+      border-radius: 999px;
+      background: #fff;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-weight: 900;
+      white-space: nowrap;
+    }
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr);
+      gap: 16px;
+      align-items: start;
+    }
+    .panel {
+      background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 8px;
-      padding: 12px;
-      line-height: 1.6;
-      outline: none;
-    }
-    .result {
-      margin-top: 16px;
-      background: #111827;
-      color: #f8fafc;
-      border-radius: 8px;
-      border: 1px solid #0f172a;
       overflow: hidden;
+      box-shadow: 0 16px 38px rgba(15, 23, 42, .06);
     }
-    .result-head {
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
-      padding: 12px 14px;
-      border-bottom: 1px solid rgba(255,255,255,.12);
-      font-weight: 900;
+    .panel-head {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      background: #fbfcff;
     }
-    pre {
+    .panel-head h2 {
       margin: 0;
-      min-height: 260px;
-      max-height: 520px;
-      overflow: auto;
-      padding: 15px;
-      white-space: pre-wrap;
-      word-break: break-word;
-      line-height: 1.55;
+      font-size: 23px;
+    }
+    .panel-head p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      line-height: 1.6;
+      font-weight: 750;
+      word-break: keep-all;
+    }
+    .detail {
+      padding: 18px;
+      display: grid;
+      gap: 14px;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      gap: 12px;
+      align-items: start;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--line);
+    }
+    .row:last-child { border-bottom: 0; padding-bottom: 0; }
+    .row span {
+      color: var(--muted);
+      font-weight: 950;
       font-size: 13px;
     }
-    @media (max-width: 800px) {
-      header, .grid { grid-template-columns: 1fr; }
-      .top-links { justify-content: flex-start; }
+    .row strong, .row code {
+      font-weight: 900;
+      word-break: break-word;
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+    }
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 0 18px 18px;
+    }
+    .run, .ghost {
+      min-height: 42px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 14px;
+      border-radius: 8px;
+      border: 1px solid var(--accent);
+      background: var(--accent);
+      color: #fff;
+      font-weight: 950;
+    }
+    .ghost {
+      background: #fff;
+      color: var(--ink);
+      border-color: var(--line);
+    }
+    .result {
+      background: var(--dark);
+      color: #f8fafc;
+    }
+    .result .panel-head {
+      background: #111827;
+      border-color: rgba(255,255,255,.12);
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .result .panel-head h2 { color: #fff; }
+    .result .panel-head p { color: #cbd5e1; }
+    pre {
+      min-height: 472px;
+      max-height: 640px;
+      margin: 0;
+      padding: 18px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.58;
+      font-size: 13px;
+    }
+    @media (max-width: 960px) {
+      .layout, .workspace { grid-template-columns: 1fr; }
+      aside { position: relative; height: auto; }
+      header { align-items: flex-start; flex-direction: column; }
     }
   </style>
 </head>
 <body>
-  <main class="wrap">
-    <header>
-      <div>
-        <h1>유가 분석 실행 센터</h1>
-        <p class="lead">국내 유가, 국제 유가, 환율, 뉴스 리스크 기반 분석 기능을 한 화면에서 실행합니다.</p>
+  <div class="layout">
+    <aside>
+      <div class="brand">
+        <strong>유가 분석 API</strong>
+        <span>필요한 API를 선택하고 바로 실행 결과를 확인합니다.</span>
       </div>
-      <nav class="top-links">
-        <a class="link" href="/">홈</a>
-        <a class="link" href="/graphs">그래프</a>
-        <a class="link" href="/openapi.json">OpenAPI JSON</a>
+      <nav class="nav-links">
+        <a href="/">홈</a>
+        <a href="/graphs">그래프</a>
+        <a href="/openapi.json">OpenAPI</a>
+        <a href="/summary">JSON</a>
       </nav>
-    </header>
+      <div class="endpoint-list" id="endpointList"></div>
+    </aside>
 
-    <section class="grid">
-      <article class="card">
+    <main>
+      <header>
         <div>
-          <span class="method">GET /summary</span>
-          <h2>오늘 유가 요약</h2>
-          <p>오늘 국내 유가, WTI, Brent, 환율, 뉴스 리스크를 한 번에 확인합니다.</p>
+          <h1>유가 분석 실행 문서</h1>
+          <p class="lead">국내 유가, 국제 유가, 환율, 뉴스 리스크 분석 API를 간단하게 확인합니다.</p>
         </div>
-        <button class="run" onclick="runRequest('GET', '/summary')">요약 보기</button>
-      </article>
+        <div class="status-pill" id="statusPill">대기 중</div>
+      </header>
 
-      <article class="card">
-        <div>
-          <span class="method">GET /forecast</span>
-          <h2>7일 예측</h2>
-          <p>오늘 날짜 기준 다음 7일간 예측 유가 표를 불러옵니다.</p>
-        </div>
-        <button class="run" onclick="runRequest('GET', '/forecast')">예측 보기</button>
-      </article>
+      <section class="workspace">
+        <article class="panel">
+          <div class="panel-head">
+            <h2 id="endpointTitle">API 선택</h2>
+            <p id="endpointDesc">왼쪽 목록에서 실행할 API를 선택하세요.</p>
+          </div>
+          <div class="detail">
+            <div class="row"><span>Method</span><strong id="endpointMethod">-</strong></div>
+            <div class="row"><span>Path</span><code id="endpointPath">-</code></div>
+            <div class="row"><span>Output</span><strong id="endpointOutput">-</strong></div>
+            <div class="row"><span>Note</span><strong id="endpointNote">-</strong></div>
+          </div>
+          <div class="actions">
+            <button class="run" id="runButton">실행</button>
+            <a class="ghost" id="openButton" href="#">새 창으로 열기</a>
+          </div>
+        </article>
 
-      <article class="card">
-        <div>
-          <span class="method">GET /graphs/list</span>
-          <h2>그래프 목록</h2>
-          <p>웹에서 볼 수 있는 전체 그래프 파일과 바로가기 주소를 확인합니다.</p>
-        </div>
-        <button class="run" onclick="runRequest('GET', '/graphs/list')">목록 보기</button>
-      </article>
-
-      <article class="card">
-        <div>
-          <span class="method post">POST /refresh</span>
-          <h2>최신 데이터 갱신</h2>
-          <p>인터넷에서 최신 데이터를 다시 받고 EDA/예측/그래프를 재생성합니다.</p>
-        </div>
-        <button class="run" onclick="refreshData()">최신화 실행</button>
-      </article>
-    </section>
-
-    <section class="result">
-      <div class="result-head">
-        <span id="resultTitle">실행 결과</span>
-        <span id="resultStatus">대기 중</span>
-      </div>
-      <pre id="output">위 버튼 중 하나를 누르면 결과가 여기에 표시됩니다.</pre>
-    </section>
-  </main>
+        <article class="panel result">
+          <div class="panel-head">
+            <div>
+              <h2>실행 결과</h2>
+              <p id="resultTitle">결과가 여기에 표시됩니다.</p>
+            </div>
+            <span id="resultStatus">Ready</span>
+          </div>
+          <pre id="output">왼쪽에서 API를 선택한 뒤 실행 버튼을 누르세요.</pre>
+        </article>
+      </section>
+    </main>
+  </div>
 
   <script>
-    function showResult(title, status, data) {
+    const endpoints = [
+      {
+        method: 'GET',
+        path: '/summary',
+        title: '오늘 유가 요약',
+        desc: '국내 유가, WTI, Brent, 환율, 뉴스 리스크를 한 번에 확인합니다.',
+        output: 'latest, forecast, news, meta, sources',
+        note: '페이지 진입 시 최신 산출물이 오래됐으면 자동 갱신을 시도합니다.'
+      },
+      {
+        method: 'GET',
+        path: '/forecast',
+        title: '7일 예측',
+        desc: '오늘 날짜 기준 향후 7일 예측 유가와 변화 이유를 확인합니다.',
+        output: 'date, predicted_domestic_price, reason',
+        note: '표의 reason은 전일 예측 대비 흐름과 뉴스/시장 지표를 함께 설명합니다.'
+      },
+      {
+        method: 'GET',
+        path: '/graphs/list',
+        title: '그래프 목록',
+        desc: '웹에서 볼 수 있는 전체 그래프 파일과 원본 PNG 주소를 확인합니다.',
+        output: 'filename, title, url, detail_url',
+        note: '그래프 순서는 보고서 발표 흐름에 맞춰 정렬되어 있습니다.'
+      },
+      {
+        method: 'POST',
+        path: '/refresh',
+        title: '최신 데이터 갱신',
+        desc: '온라인 데이터를 다시 수집하고 EDA, 예측, 그래프 생성을 실행합니다.',
+        output: 'status, message',
+        note: '네트워크와 모델 예측이 포함되어 시간이 걸릴 수 있습니다.',
+        confirm: '최신 데이터 수집과 그래프 재생성을 실행할까요? 시간이 걸릴 수 있습니다.'
+      }
+    ];
+    let selectedIndex = 0;
+
+    function renderEndpointList() {
+      const list = document.getElementById('endpointList');
+      list.innerHTML = endpoints.map((endpoint, index) => `
+        <button class="endpoint ${index === selectedIndex ? 'active' : ''}" data-index="${index}">
+          <span class="method ${endpoint.method === 'POST' ? 'post' : ''}">${endpoint.method} ${endpoint.path}</span>
+          <small>${endpoint.title}</small>
+        </button>
+      `).join('');
+      list.querySelectorAll('button').forEach(button => {
+        button.addEventListener('click', () => selectEndpoint(Number(button.dataset.index)));
+      });
+    }
+    function selectEndpoint(index) {
+      selectedIndex = index;
+      const endpoint = endpoints[selectedIndex];
+      renderEndpointList();
+      document.getElementById('endpointTitle').textContent = endpoint.title;
+      document.getElementById('endpointDesc').textContent = endpoint.desc;
+      document.getElementById('endpointMethod').textContent = endpoint.method;
+      document.getElementById('endpointPath').textContent = endpoint.path;
+      document.getElementById('endpointOutput').textContent = endpoint.output;
+      document.getElementById('endpointNote').textContent = endpoint.note;
+      document.getElementById('openButton').href = endpoint.method === 'GET' ? endpoint.path : '#';
+      document.getElementById('openButton').style.display = endpoint.method === 'GET' ? 'inline-flex' : 'none';
+    }
+    function setOutput(title, status, data) {
+      document.getElementById('statusPill').textContent = status;
       document.getElementById('resultTitle').textContent = title;
       document.getElementById('resultStatus').textContent = status;
-      document.getElementById('output').textContent =
-        typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+      document.getElementById('output').textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
     }
-    async function runRequest(method, path, body = null) {
-      showResult(`${method} ${path}`, '실행 중...', '');
+    async function runSelected() {
+      const endpoint = endpoints[selectedIndex];
+      if (endpoint.confirm && !confirm(endpoint.confirm)) return;
+      setOutput(`${endpoint.method} ${endpoint.path}`, '실행 중...', '');
       try {
-        const options = { method, headers: {} };
-        if (body) {
-          options.headers['Content-Type'] = 'application/json';
-          options.body = JSON.stringify(body);
-        }
-        const response = await fetch(path, options);
+        const response = await fetch(endpoint.path, { method: endpoint.method });
         const data = await response.json();
-        showResult(`${method} ${path}`, `${response.status} ${response.statusText}`, data);
+        setOutput(`${endpoint.method} ${endpoint.path}`, `${response.status} ${response.statusText}`, data);
       } catch (error) {
-        showResult(`${method} ${path}`, '오류', String(error));
+        setOutput(`${endpoint.method} ${endpoint.path}`, '오류', String(error));
       }
     }
-    async function refreshData() {
-      if (!confirm('최신 데이터 수집과 그래프 재생성을 실행할까요? 시간이 걸릴 수 있습니다.')) return;
-      await runRequest('POST', '/refresh');
-    }
+    document.getElementById('runButton').addEventListener('click', runSelected);
+    renderEndpointList();
+    selectEndpoint(0);
   </script>
 </body>
 </html>
