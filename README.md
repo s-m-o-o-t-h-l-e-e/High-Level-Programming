@@ -20,7 +20,6 @@ backend/api/              데이터 수집, 전처리, EDA, 모델링, 예측 AP
 backend/models/           학습된 LSTM 모델과 스케일러
 backend/outputs/          최신 CSV, 예측표, 그래프 산출물
 docs/                     서비스 정의, 데이터 출처, 실행 가이드
-evaluation/oil-price/     발표/보고서용 평가 결과
 scripts/                  결과 패키지 생성 스크립트
 shared/contracts/         API 응답 예시와 데이터 계약 문서
 ```

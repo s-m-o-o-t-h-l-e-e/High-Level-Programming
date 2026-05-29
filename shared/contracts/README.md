@@ -36,30 +36,6 @@ GET /forecast
 ]
 ```
 
-## Agent
-
-```http
-POST /agent
-```
-
-요청:
-
-```json
-{
-  "question": "전쟁 뉴스 리스크가 유가 예측에 어떤 영향을 줘?"
-}
-```
-
-응답:
-
-```json
-{
-  "question": "전쟁 뉴스 리스크가 유가 예측에 어떤 영향을 줘?",
-  "answer": "뉴스 리스크 점수와 7일 예측을 바탕으로 한 설명",
-  "facts": {}
-}
-```
-
 ## Graphs
 
 ```http
