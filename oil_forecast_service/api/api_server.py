@@ -122,7 +122,7 @@ def _ensure_current_outputs() -> None:
 def _figure_files() -> list[dict[str, str]]:
     titles = {
         "oil_price_dashboard.png": "유가 현황 및 7일 예측",
-        "seven_day_forecast.png": "향후 7일 유가 예측",
+        "today_based_forecast.png": "오늘 기준 7일 예측 유가 그래프",
         "oil_price_trend_1w.png": "유가추이 1주",
         "oil_price_trend_1m.png": "유가추이 1개월",
         "oil_price_trend_1y.png": "유가추이 1년",
@@ -142,7 +142,7 @@ def _figure_files() -> list[dict[str, str]]:
         "oil_price_trend_1m.png": 20,
         "oil_price_trend_1y.png": 30,
         "oil_price_trend_3y.png": 40,
-        "seven_day_forecast.png": 50,
+        "today_based_forecast.png": 50,
         "oil_price_dashboard.png": 60,
         "histogram_daily_returns.png": 70,
         "bar_recent_changes.png": 80,
@@ -407,12 +407,15 @@ def _latest_snapshot() -> dict[str, Any]:
     audit = _read_csv(PATHS.source_audit)
     news = load_news_adjustment()
     news_headlines = _news_headlines_for_reason(float(news.get("forecast_adjustment_pct", 0.0)))
+    meta_values = dict(zip(meta.get("key", []), meta.get("value", []))) if not meta.empty else {}
 
     latest: dict[str, Any] = {}
     if not raw.empty:
         row = raw.iloc[-1]
+        updated_at = meta_values.get("downloaded_at") or str(pd.Timestamp(raw.index[-1]).date())
         latest = {
             "date": str(raw.index[-1].date()),
+            "updated_at": updated_at,
             "domestic_price": round(float(row.get("domestic_price", 0)), 2),
             "wti": round(float(row.get("wti", 0)), 2),
             "brent": round(float(row.get("brent", 0)), 2),
@@ -457,7 +460,7 @@ def _latest_snapshot() -> dict[str, Any]:
         "forecast": forecast_rows,
         "news": news,
         "news_headlines": news_headlines,
-        "meta": dict(zip(meta.get("key", []), meta.get("value", []))) if not meta.empty else {},
+        "meta": meta_values,
         "sources": dict(zip(audit.get("key", []), audit.get("value", []))) if not audit.empty else {},
     }
 
@@ -587,10 +590,10 @@ def simple_docs() -> FileResponse:
 
 
 @app.post("/refresh", response_model=RefreshResponse, tags=["analysis"])
-def refresh_data() -> RefreshResponse:
+def refresh_data(force: bool = False) -> RefreshResponse:
     global _AUTO_REFRESH_DONE_FOR
     age = _refresh_age_seconds()
-    if age is not None and age < REFRESH_COOLDOWN_SECONDS and _outputs_are_current():
+    if not force and age is not None and age < REFRESH_COOLDOWN_SECONDS and _outputs_are_current():
         return RefreshResponse(
             status="cached",
             message=(

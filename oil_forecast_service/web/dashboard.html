@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>유가 예측 서비스</title>
-  <link rel="stylesheet" href="/web/theme.css" />
+  <link rel="stylesheet" href="/web/theme.css?v=20260530-today-only-forecast" />
 </head>
 <body>
   <main class="page">
@@ -67,11 +67,11 @@
       <div class="forecast-layout">
         <article class="panel">
           <div class="panel-head">
-            <h3>예측 그래프</h3>
-            <a class="link-button" id="forecastPng" href="/figures/seven_day_forecast.png">PNG</a>
+            <h3>오늘 기준 7일 예측 유가 그래프</h3>
+            <a class="link-button" id="forecastPng" href="/figures/today_based_forecast.png?v=20260530-today-only-forecast">PNG</a>
           </div>
           <div class="chart-frame">
-            <img id="forecastChart" src="/figures/seven_day_forecast.png" alt="향후 7일 유가 예측 그래프" />
+            <img id="forecastChart" src="/figures/today_based_forecast.png?v=20260530-today-only-forecast" alt="오늘 기준 7일 예측 유가 그래프" />
           </div>
         </article>
         <article class="panel">
@@ -84,7 +84,7 @@
                 <tr>
                   <th>날짜</th>
                   <th>예측</th>
-                  <th>변화</th>
+                  <th>전일 대비</th>
                   <th>변화 이유</th>
                 </tr>
               </thead>
@@ -124,6 +124,6 @@
       </div>
     </section>
   </main>
-  <script src="/web/dashboard.js"></script>
+  <script src="/web/dashboard.js?v=20260530-clean-status"></script>
 </body>
 </html>

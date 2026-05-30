@@ -10,6 +10,14 @@ function setText(id, text) {
   if (element) element.textContent = text;
 }
 
+function formatDateTime(value) {
+  if (!value) return '-';
+  const text = String(value).trim();
+  const match = text.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{2}:\d{2}(?::\d{2})?))?/);
+  if (!match) return text;
+  return match[2] ? `${match[1]} ${match[2]}` : match[1];
+}
+
 function changeClass(value) {
   if (value > 0.05) return 'up';
   if (value < -0.05) return 'down';
@@ -23,11 +31,8 @@ function changeLabel(value) {
 
 function totalForecastChange(todayPrice, forecast) {
   if (!Number.isFinite(todayPrice) || !forecast.length) return NaN;
-  return forecast.reduce((total, row) => {
-    const value = Number(row.predicted_domestic_price);
-    if (!Number.isFinite(value)) return total;
-    return total + (value - todayPrice);
-  }, 0);
+  const lastPrice = Number(forecast[forecast.length - 1].predicted_domestic_price);
+  return Number.isFinite(lastPrice) ? lastPrice - todayPrice : NaN;
 }
 
 function cacheBust(url) {
@@ -47,13 +52,14 @@ async function loadGraphs() {
   return response.json();
 }
 
-function renderSummary(data) {
+function renderSummary(data, statusMessage = null) {
   const latest = data.latest || {};
   const forecast = data.forecast || [];
   const news = data.news || {};
   const todayPrice = Number(latest.domestic_price);
+  const updatedAt = formatDateTime(latest.updated_at || latest.date);
 
-  setText('todayDate', `${latest.date || '-'} 기준`);
+  setText('todayDate', `${updatedAt} 기준`);
   setText('todayPrice', number(todayPrice, ' 원/L'));
   setText('wtiValue', number(latest.wti, ' $/bbl'));
   setText('brentValue', number(latest.brent, ' $/bbl'));
@@ -71,9 +77,9 @@ function renderSummary(data) {
     element.className = cls;
   }
 
-  const statusDate = latest.date || '날짜 확인 중';
-  setText('dataStatus', `데이터 기준일: ${statusDate} / 서버가 최신화를 시도합니다.`);
+  setText('dataStatus', statusMessage || `데이터 기준일: ${updatedAt}`);
   renderForecastRows(todayPrice, forecast);
+  return updatedAt;
 }
 
 function renderForecastRows(todayPrice, forecast) {
@@ -82,9 +88,11 @@ function renderForecastRows(todayPrice, forecast) {
     tbody.innerHTML = '<tr><td colspan="4">예측 데이터가 없습니다.</td></tr>';
     return;
   }
+  let previousPrice = todayPrice;
   tbody.innerHTML = forecast.map(row => {
     const price = Number(row.predicted_domestic_price);
-    const diff = price - todayPrice;
+    const diff = Number.isFinite(previousPrice) ? price - previousPrice : NaN;
+    previousPrice = price;
     return `
       <tr>
         <td>${row.date}</td>
@@ -128,21 +136,34 @@ function renderGraphs(graphs) {
 }
 
 async function refreshData() {
+  const button = document.querySelector('[data-action="refresh"]');
+  if (button) button.disabled = true;
   setText('dataStatus', '최신 데이터를 갱신하는 중입니다...');
-  const response = await fetch('/refresh', { method: 'POST' });
-  const result = await response.json();
-  setText('dataStatus', result.message || '갱신 완료');
-  await boot();
+  try {
+    const response = await fetch('/refresh?force=true', { method: 'POST' });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || result.message || `HTTP ${response.status}`);
+    await boot({ refreshed: true, refreshMessage: result.message });
+  } catch (error) {
+    setText('dataStatus', `최신화 실패: ${error.message}`);
+  } finally {
+    if (button) button.disabled = false;
+  }
 }
 
-async function boot() {
+async function boot(options = {}) {
   try {
     const [summary, graphs] = await Promise.all([loadSummary(), loadGraphs()]);
-    renderSummary(summary);
+    const updatedAt = formatDateTime(summary.latest?.updated_at || summary.latest?.date);
+    const statusMessage = options.refreshed
+      ? `최신화 완료: ${updatedAt} 기준 데이터로 갱신했습니다.`
+      : null;
+    renderSummary(summary, statusMessage);
     renderGraphs(graphs);
     const chart = document.getElementById('forecastChart');
     const png = document.getElementById('forecastPng');
-    chart.src = cacheBust('/figures/seven_day_forecast.png');
+    chart.src = cacheBust('/figures/today_based_forecast.png');
+    chart.dataset.mode = 'today-only-forecast';
     png.href = chart.src;
   } catch (error) {
     setText('dataStatus', `데이터 로딩 실패: ${error.message}`);
