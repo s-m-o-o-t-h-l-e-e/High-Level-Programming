@@ -3,7 +3,6 @@
 ## 1. 서버 실행
 
 ```bash
-cd High-Level-Programming
 python3 run_server.py
 ```
 
