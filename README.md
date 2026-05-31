@@ -46,13 +46,13 @@ python3 run_server.py
 브라우저에서 아래 주소로 접속합니다.
 
 ```text
-http://127.0.0.1:8000
+http://127.0.0.1:8001
 ```
 
 포트가 이미 사용 중이면 원하는 포트로 직접 실행합니다.
 
 ```bash
-uvicorn oil_forecast_service.api.api_server:app --host 127.0.0.1 --port 8001
+uvicorn oil_forecast_service.api.api_server:app --host 127.0.0.1 --port 8002
 ```
 
 이 경우 브라우저 주소는 다음과 같습니다.
