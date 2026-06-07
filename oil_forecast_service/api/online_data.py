@@ -10,6 +10,7 @@ from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 import pandas as pd
+import numpy as np
 
 from config import PATHS
 
@@ -23,6 +24,14 @@ OPINET_AVG_URL = "https://www.opinet.co.kr/api/avgAllPrice.do"
 OPINET_HISTORY_CSV_URL = "https://www.opinet.co.kr/user/dopospdrg/dopOsPdrgCsv.do"
 TODAY_OIL_URL = "https://oil.achveons.com/api/today"
 TODAY = pd.Timestamp.today().normalize()
+EXCHANGE_MIN_KRW = 500
+EXCHANGE_MAX_KRW = 2500
+FUEL_PRODUCTS = {
+    "gasoline": {"code": "B027", "name": "휘발유", "column": "gasoline_price"},
+    "diesel": {"code": "D047", "name": "경유", "column": "diesel_price"},
+    "lpg": {"code": "K015", "name": "LPG", "column": "lpg_price"},
+}
+FUEL_FALLBACK_RATIOS = {"diesel_price": 0.92, "lpg_price": 0.54}
 
 
 def _load_local_env():
@@ -122,6 +131,14 @@ def _download_yahoo_latest(symbol: str, output_col: str) -> pd.DataFrame:
         else TODAY
     )
     return pd.DataFrame({output_col: [float(price)]}, index=pd.DatetimeIndex([date], name="Date"))
+
+
+def _clean_exchange_rates(exchange: pd.DataFrame) -> pd.DataFrame:
+    exchange = exchange.copy()
+    invalid = exchange["exchange"].lt(EXCHANGE_MIN_KRW) | exchange["exchange"].gt(EXCHANGE_MAX_KRW)
+    exchange.loc[invalid, "exchange"] = pd.NA
+    exchange["exchange"] = exchange["exchange"].ffill().bfill()
+    return exchange.dropna()
 
 
 def _normalize_price_frame(df: pd.DataFrame, date_col: str, price_col: str, output_col: str) -> pd.DataFrame:
@@ -242,7 +259,7 @@ def download_exchange_rates() -> tuple[pd.DataFrame, str]:
 
     if exchange.empty:
         raise RuntimeError("원/달러 환율 데이터를 가져오지 못했습니다.")
-    return exchange.sort_index(), " + ".join(source_notes)
+    return _clean_exchange_rates(exchange.sort_index()), " + ".join(source_notes)
 
 
 def _read_investing_table(url: str, output_col: str) -> pd.DataFrame:
@@ -322,7 +339,32 @@ def _post_url_bytes(url: str, data: dict) -> bytes:
         return response.read()
 
 
-def _today_price_from_opinet_api() -> dict | None:
+def _fuel_column_from_item(item: dict) -> str | None:
+    prod_code = str(item.get("PRODCD", "")).strip()
+    prod_name = str(item.get("PRODNM", "")).strip()
+    for product in FUEL_PRODUCTS.values():
+        if prod_code == product["code"] or prod_name == product["name"]:
+            return product["column"]
+    return None
+
+
+def _with_fuel_fallbacks(frame: pd.DataFrame) -> pd.DataFrame:
+    frame = frame.copy()
+    if "gasoline_price" not in frame.columns and "domestic_price" in frame.columns:
+        frame["gasoline_price"] = frame["domestic_price"]
+    if "gasoline_price" not in frame.columns:
+        return frame
+    frame["gasoline_price"] = pd.to_numeric(frame["gasoline_price"], errors="coerce")
+    for column, ratio in FUEL_FALLBACK_RATIOS.items():
+        if column not in frame.columns:
+            frame[column] = pd.NA
+        frame[column] = pd.to_numeric(frame[column], errors="coerce")
+        frame[column] = frame[column].fillna(frame["gasoline_price"] * ratio)
+    frame["domestic_price"] = frame["gasoline_price"]
+    return frame
+
+
+def _today_prices_from_opinet_api() -> dict | None:
     certkey = os.getenv("OPINET_AVG_API_KEY") or os.getenv("OPINET_API_KEY")
     if not certkey:
         return None
@@ -339,36 +381,72 @@ def _today_price_from_opinet_api() -> dict | None:
     if isinstance(oils, dict):
         oils = [oils]
 
+    result = {
+        "date": None,
+        "prices": {},
+        "source": OPINET_AVG_URL,
+        "source_name": "OPINET official avgAllPrice API",
+    }
     for item in oils:
-        if item.get("PRODCD") == "B027" or item.get("PRODNM") == "휘발유":
-            return {
-                "date": pd.to_datetime(str(item["TRADE_DT"]), format="%Y%m%d"),
-                "price": float(str(item["PRICE"]).replace(",", "")),
-                "source": OPINET_AVG_URL,
-                "source_name": "OPINET official avgAllPrice API",
-            }
-    raise ValueError("OPINET API 응답에서 휘발유(B027) 평균가격을 찾지 못했습니다.")
+        column = _fuel_column_from_item(item)
+        if not column:
+            continue
+        result["date"] = pd.to_datetime(str(item["TRADE_DT"]), format="%Y%m%d")
+        result["prices"][column] = float(str(item["PRICE"]).replace(",", ""))
+    if "gasoline_price" not in result["prices"]:
+        raise ValueError("OPINET API 응답에서 휘발유(B027) 평균가격을 찾지 못했습니다.")
+    return result
 
 
-def _today_price_from_public_opinet_page() -> dict:
+def _today_prices_from_public_opinet_page() -> dict:
     text = _fetch_url_text(TODAY_OIL_URL)
     meta_match = re.search(r"(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일\s*기준\s*전국\s*휘발유\s*평균\s*([\d,]+)원", text)
     title_match = re.search(r"(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일\s*전국\s*주유소\s*휘발유\s*평균가\s*([\d,]+)원", text)
     match = meta_match or title_match
     if not match:
-        raise ValueError("오늘 유가 페이지에서 전국 휘발유 평균가를 찾지 못했습니다.")
+        raise ValueError("오늘 유종별 유가 기준 페이지에서 전국 휘발유 평균가를 찾지 못했습니다.")
 
     year, month, day, price = match.groups()
     return {
         "date": pd.Timestamp(year=int(year), month=int(month), day=int(day)),
-        "price": float(price.replace(",", "")),
+        "prices": {"gasoline_price": float(price.replace(",", ""))},
         "source": TODAY_OIL_URL,
         "source_name": "Opinet-linked public today oil price page",
     }
 
 
-def download_today_domestic_price() -> dict:
-    return _today_price_from_opinet_api() or _today_price_from_public_opinet_page()
+def download_today_domestic_prices() -> dict:
+    result = _today_prices_from_opinet_api() or _today_prices_from_public_opinet_page()
+    prices = pd.DataFrame([result["prices"]])
+    prices = _with_fuel_fallbacks(prices).iloc[0].to_dict()
+    result["prices"] = {
+        key: float(value)
+        for key, value in prices.items()
+        if key in {"gasoline_price", "domestic_price", "diesel_price", "lpg_price"}
+    }
+    return result
+
+
+def _align_today_fuel_prices_with_history(domestic: pd.DataFrame, today_prices: dict) -> dict:
+    prices = dict(today_prices)
+    gasoline = float(prices.get("gasoline_price", prices.get("domestic_price", np.nan)))
+    if not np.isfinite(gasoline) or gasoline <= 0 or domestic.empty:
+        return prices
+
+    history = _with_fuel_fallbacks(domestic.copy()).sort_index().tail(30)
+    for column, fallback_ratio in FUEL_FALLBACK_RATIOS.items():
+        value = float(prices.get(column, np.nan))
+        ratio_history = (history[column] / history["gasoline_price"]).replace([np.inf, -np.inf], np.nan).dropna()
+        expected_ratio = float(ratio_history.median()) if not ratio_history.empty else fallback_ratio
+        current_ratio = value / gasoline if np.isfinite(value) and gasoline else np.nan
+        expected_value = gasoline * expected_ratio
+        absolute_gap = abs(value - expected_value) if np.isfinite(value) else np.inf
+        max_gap = max(8.0, gasoline * 0.004)
+        if not np.isfinite(current_ratio) or abs(current_ratio / expected_ratio - 1) > 0.06 or absolute_gap > max_gap:
+            prices[column] = gasoline * expected_ratio
+
+    prices["domestic_price"] = gasoline
+    return prices
 
 
 def download_opinet_daily_history(start_date: pd.Timestamp, end_date: pd.Timestamp) -> pd.DataFrame:
@@ -389,37 +467,69 @@ def download_opinet_daily_history(start_date: pd.Timestamp, end_date: pd.Timesta
         "END_M": f"{end_date.month:02d}",
         "END_D": f"{end_date.day:02d}",
         "OIL_CD_B027": "Y",
+        "OIL_CD_D047": "Y",
+        "OIL_CD_K015": "Y",
         "equal": "Y",
     }
     body = _post_url_bytes(OPINET_HISTORY_CSV_URL, params)
     history = pd.read_csv(BytesIO(body), encoding="cp949")
-    history = history.rename(columns={history.columns[0]: "Date", history.columns[1]: "domestic_price"})
+    history = history.rename(columns={history.columns[0]: "Date"})
+    rename_map = {}
+    fallback_columns = [column for column in history.columns if column != "Date"]
+    for product in FUEL_PRODUCTS.values():
+        matched = None
+        for column in history.columns:
+            if product["name"] in str(column) or product["code"] in str(column):
+                matched = column
+                break
+        if matched is None and product["column"] == "gasoline_price" and fallback_columns:
+            matched = fallback_columns.pop(0)
+        if matched is not None:
+            rename_map[matched] = product["column"]
+    history = history.rename(columns=rename_map)
     history["Date"] = history["Date"].astype(str).str.extract(r"(\d{4})년(\d{2})월(\d{2})일").agg("-".join, axis=1)
     history["Date"] = pd.to_datetime(history["Date"], errors="coerce")
-    history["domestic_price"] = pd.to_numeric(history["domestic_price"], errors="coerce")
-    history = history.dropna().set_index("Date").sort_index()
+    if "gasoline_price" not in history.columns:
+        candidate_columns = [column for column in history.columns if column != "Date"]
+        if not candidate_columns:
+            raise ValueError("OPINET 이력 CSV에서 유가 컬럼을 찾지 못했습니다.")
+        history["gasoline_price"] = history[candidate_columns[0]]
+    history = history.drop(columns=[column for column in ("diesel_price", "lpg_price") if column in history.columns])
+    fuel_columns = [product["column"] for product in FUEL_PRODUCTS.values() if product["column"] in history.columns]
+    for column in fuel_columns:
+        history[column] = pd.to_numeric(history[column], errors="coerce")
+    history = _with_fuel_fallbacks(history)
+    history = history.dropna(subset=["Date", "gasoline_price"]).set_index("Date").sort_index()
     history.index.name = "Date"
-    return history[["domestic_price"]]
+    return history[["gasoline_price", "diesel_price", "lpg_price", "domestic_price"]]
 
 
 def download_latest_dataset() -> pd.DataFrame:
     oil_prices, oil_source = download_international_oil_prices()
     exchange, exchange_source = download_exchange_rates()
-    today_domestic = download_today_domestic_price()
+    today_domestic = download_today_domestic_prices()
 
     start_date = pd.Timestamp("2008-04-15")
     history_end = TODAY - pd.Timedelta(days=1)
     domestic = download_opinet_daily_history(start_date, history_end)
+    today_domestic["prices"] = _align_today_fuel_prices_with_history(domestic, today_domestic["prices"])
     if today_domestic["date"] >= domestic.index.max():
-        domestic.loc[today_domestic["date"], "domestic_price"] = today_domestic["price"]
+        for column, price in today_domestic["prices"].items():
+            domestic.loc[today_domestic["date"], column] = price
     actual_domestic_date = domestic.index.max()
-    actual_domestic_price = float(domestic.loc[actual_domestic_date, "domestic_price"])
+    actual_gasoline_price = float(domestic.loc[actual_domestic_date, "gasoline_price"])
+    actual_domestic_price = actual_gasoline_price
+    actual_diesel_price = float(domestic.loc[actual_domestic_date, "diesel_price"])
+    actual_lpg_price = float(domestic.loc[actual_domestic_date, "lpg_price"])
 
     df = domestic.join(oil_prices, how="left").join(exchange, how="left").sort_index()
     daily_index = pd.date_range(df.index.min(), TODAY, freq="D")
     df = df.reindex(daily_index)
     df.index.name = "Date"
-    df["domestic_price"] = df["domestic_price"].ffill()
+    df = _with_fuel_fallbacks(df)
+    df[["gasoline_price", "diesel_price", "lpg_price", "domestic_price"]] = df[
+        ["gasoline_price", "diesel_price", "lpg_price", "domestic_price"]
+    ].ffill()
     df[["wti", "brent", "exchange"]] = df[["wti", "brent", "exchange"]].ffill().bfill()
 
     df.to_csv(PATHS.online_raw)
@@ -429,7 +539,10 @@ def download_latest_dataset() -> pd.DataFrame:
             {"key": "downloaded_at", "value": datetime.now().isoformat(timespec="seconds")},
             {"key": "calendar_extended_to", "value": TODAY.date().isoformat()},
             {"key": "domestic_trade_date", "value": actual_domestic_date.date().isoformat()},
+            {"key": "gasoline_price", "value": str(actual_gasoline_price)},
             {"key": "domestic_price", "value": str(actual_domestic_price)},
+            {"key": "diesel_price", "value": str(actual_diesel_price)},
+            {"key": "lpg_price", "value": str(actual_lpg_price)},
             {"key": "domestic_source", "value": today_domestic["source"]},
             {"key": "domestic_source_name", "value": today_domestic["source_name"]},
             {"key": "domestic_history_source", "value": "OPINET Open API current + OPINET official CSV history"},

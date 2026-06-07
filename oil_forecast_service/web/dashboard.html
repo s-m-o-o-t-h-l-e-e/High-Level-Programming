@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>유가 예측 서비스</title>
-  <link rel="stylesheet" href="/web/theme.css?v=20260530-today-only-forecast" />
+  <link rel="stylesheet" href="/web/theme.css?v=20260607-fuel-tabs" />
 </head>
 <body>
   <main class="page">
@@ -12,15 +12,15 @@
       <article class="hero-main">
         <div>
           <div class="eyebrow">Oil Price Forecast</div>
-          <h1>국내 유가 예측</h1>
+          <h1>국내 유종별 유가 예측</h1>
           <p class="hero-copy">
-            오늘 전국 휘발유 평균가, 국제 유가, 환율, 뉴스 리스크를 한 화면에서 확인합니다.
+            오늘 전국 휘발유·경유·LPG 평균가, 국제 유가, 환율, 뉴스 리스크를 한 화면에서 확인합니다.
             아래 버튼만 누르면 필요한 분석으로 바로 이동합니다.
           </p>
           <div class="status-line" id="dataStatus">데이터 확인 중...</div>
         </div>
         <nav class="quick-actions">
-          <button class="action primary" data-action="summary">오늘 유가<span>현재 가격</span></button>
+          <button class="action primary" data-action="summary">유종별 현재가<span>오늘 가격</span></button>
           <button class="action" data-action="forecast">7일 예측<span>미래 가격</span></button>
           <a class="action" href="/graphs">그래프 보기<span>전체 차트</span></a>
           <button class="action" data-action="refresh">최신화<span>데이터 재수집</span></button>
@@ -29,13 +29,17 @@
 
       <aside class="panel today-box">
         <div>
-          <div class="today-label">오늘 전국 휘발유 평균가</div>
+          <div class="today-label">오늘 전국 평균가</div>
           <span class="badge" id="todayDate">기준일 확인 중</span>
         </div>
-        <div class="today-price" id="todayPrice">-</div>
-        <div class="today-meta">
-          <strong id="sevenDaySummary">7일 전망 계산 중</strong>
-          <span>Opinet-linked public today oil price page</span>
+        <div class="today-price-block">
+          <div class="selected-fuel-label" id="selectedFuelLabel">휘발유</div>
+          <div class="today-price" id="todayPrice">-</div>
+        </div>
+        <div class="fuel-summary">
+          <button class="fuel-tab active" type="button" data-fuel="gasoline"><span>휘발유</span><strong id="gasolinePrice">-</strong></button>
+          <button class="fuel-tab" type="button" data-fuel="diesel"><span>경유</span><strong id="dieselPrice">-</strong></button>
+          <button class="fuel-tab" type="button" data-fuel="lpg"><span>LPG</span><strong id="lpgPrice">-</strong></button>
         </div>
       </aside>
     </section>
@@ -44,11 +48,14 @@
       <div class="section-head">
         <div>
           <h2>핵심 지표</h2>
-          <p>국내 유가 예측에 들어가는 주요 입력값입니다.</p>
+          <p>휘발유·경유·LPG 예측과 현황 확인에 들어가는 주요 입력값입니다.</p>
         </div>
         <a class="link-button" href="/summary">JSON 보기</a>
       </div>
       <div class="metrics">
+        <article class="metric"><span>휘발유</span><strong id="gasolineMetric">-</strong><small>전국 평균가</small></article>
+        <article class="metric"><span>경유</span><strong id="dieselMetric">-</strong><small>전국 평균가</small></article>
+        <article class="metric"><span>LPG</span><strong id="lpgMetric">-</strong><small>전국 평균가</small></article>
         <article class="metric"><span>WTI</span><strong id="wtiValue">-</strong><small>국제 유가</small></article>
         <article class="metric"><span>Brent</span><strong id="brentValue">-</strong><small>국제 유가</small></article>
         <article class="metric"><span>원/달러</span><strong id="exchangeValue">-</strong><small>환율</small></article>
@@ -67,29 +74,37 @@
       <div class="forecast-layout">
         <article class="panel">
           <div class="panel-head">
-            <h3>오늘 기준 7일 예측 유가 그래프</h3>
+            <h3>오늘 기준 유종별 7일 예측 유가 그래프</h3>
             <a class="link-button" id="forecastPng" href="/figures/today_based_forecast.png?v=20260530-today-only-forecast">PNG</a>
           </div>
           <div class="chart-frame">
-            <img id="forecastChart" src="/figures/today_based_forecast.png?v=20260530-today-only-forecast" alt="오늘 기준 7일 예측 유가 그래프" />
+            <img id="forecastChart" src="/figures/today_based_forecast.png?v=20260607-fuel-tabs" alt="오늘 기준 유종별 7일 예측 유가 그래프" />
           </div>
         </article>
         <article class="panel">
           <div class="panel-head">
             <h3>예측표</h3>
           </div>
-          <div style="overflow:auto;">
-            <table>
+          <div class="forecast-table-wrap">
+            <table class="forecast-table">
+              <colgroup>
+                <col class="date-col" />
+                <col class="time-col" />
+                <col class="fuel-col" />
+                <col class="fuel-col" />
+                <col class="fuel-col" />
+              </colgroup>
               <thead>
                 <tr>
                   <th>날짜</th>
-                  <th>예측</th>
-                  <th>전일 대비</th>
-                  <th>변화 이유</th>
+                  <th>예측 기준</th>
+                  <th>휘발유</th>
+                  <th>경유</th>
+                  <th>LPG</th>
                 </tr>
               </thead>
               <tbody id="forecastRows">
-                <tr><td colspan="4">불러오는 중...</td></tr>
+                <tr><td colspan="5">불러오는 중...</td></tr>
               </tbody>
             </table>
           </div>
@@ -124,6 +139,6 @@
       </div>
     </section>
   </main>
-  <script src="/web/dashboard.js?v=20260530-clean-status"></script>
+  <script src="/web/dashboard.js?v=20260607-fuel-tabs"></script>
 </body>
 </html>

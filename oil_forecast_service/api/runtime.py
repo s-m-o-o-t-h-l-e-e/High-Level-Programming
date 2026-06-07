@@ -5,8 +5,10 @@ from pathlib import Path
 
 
 _TF = None
-os.environ.setdefault("MPLCONFIGDIR", str(Path(__file__).resolve().parent / "outputs" / "matplotlib_cache"))
-os.environ["MPLCONFIGDIR"] = str(Path(__file__).resolve().parents[1] / "outputs" / "matplotlib_cache")
+_OUTPUT_DIR = Path(__file__).resolve().parents[1] / "outputs"
+_OUTPUT_DIR.mkdir(exist_ok=True)
+(_OUTPUT_DIR / "matplotlib_cache").mkdir(exist_ok=True)
+os.environ["MPLCONFIGDIR"] = str(_OUTPUT_DIR / "matplotlib_cache")
 
 
 def get_tensorflow(suppress_logs: bool = False):
@@ -39,9 +41,13 @@ def configure_tensorflow(device: str = "auto"):
     if not gpus:
         message = "사용 가능한 TensorFlow Metal GPU가 없습니다."
         if device == "gpu":
+            python_hint = "python3 -m pip install --upgrade tensorflow-macos tensorflow-metal"
+            system_hint = f"{platform.system()} {platform.machine()} / Python {platform.python_version()} / TensorFlow {tf.__version__}"
             raise RuntimeError(
-                f"{message} 현재 환경에서는 GPU 실행을 할 수 없습니다. "
-                "tensorflow-metal/OS/칩셋 지원 상태를 확인해야 합니다."
+                f"{message} CPU로 대체 실행하지 않습니다.\n"
+                f"현재 환경: {system_hint}\n"
+                "Mac GPU 학습은 Apple Metal을 TensorFlow가 GPU 장치로 인식해야만 가능합니다.\n"
+                f"로컬 설치 확인 예: {python_hint}"
             )
         print(f"실행 장치: CPU ({message})")
         return

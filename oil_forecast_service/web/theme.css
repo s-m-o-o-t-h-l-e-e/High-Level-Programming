@@ -59,7 +59,8 @@ h1 {
   line-height: 1.02;
   letter-spacing: 0;
 }
-.hero-copy, .section-head p, .reason-cell {
+
+.hero-copy, .section-head p {
   color: var(--muted);
   word-break: keep-all;
 }
@@ -107,10 +108,50 @@ h1 {
   font-size: 14px;
   font-weight: 900;
 }
-.today-price {
+.today-price-block {
   align-self: center;
+  display: grid;
+  gap: 18px;
+}
+.today-price {
   font-size: clamp(44px, 7vw, 78px);
   line-height: 1;
+  font-weight: 950;
+  letter-spacing: 0;
+}
+.selected-fuel-label {
+  color: var(--muted);
+  font-size: 22px;
+  font-weight: 950;
+}
+.fuel-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.fuel-tab {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcff;
+  text-align: left;
+}
+.fuel-tab.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.fuel-tab span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 950;
+}
+.fuel-tab strong {
+  display: block;
+  margin-top: 5px;
+  font-size: 16px;
   font-weight: 950;
   letter-spacing: 0;
 }
@@ -157,7 +198,7 @@ h1 {
 .solid-button, .run { color: #fff; }
 .metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 12px;
 }
 .metric {
@@ -176,7 +217,7 @@ h1 {
 .metric strong {
   display: block;
   margin-top: 8px;
-  font-size: 27px;
+  font-size: 22px;
   letter-spacing: 0;
 }
 .metric small {
@@ -211,10 +252,30 @@ h1 {
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th, td { padding: 12px 14px; border-bottom: 1px solid var(--line); text-align: left; }
 th { color: var(--muted); background: #f8fafc; font-size: 12px; font-weight: 950; }
+.forecast-table-wrap { width: 100%; overflow-x: auto; }
+.forecast-table {
+  table-layout: fixed;
+  min-width: 720px;
+  font-size: 15px;
+}
+.forecast-table .date-col { width: 18%; }
+.forecast-table .time-col { width: 28%; }
+.forecast-table .fuel-col { width: 18%; }
+.forecast-table th,
+.forecast-table td {
+  padding: 15px 16px;
+  white-space: nowrap;
+}
+.forecast-table th:nth-child(3),
+.forecast-table th:nth-child(4),
+.forecast-table th:nth-child(5),
+.forecast-table .numeric {
+  text-align: right;
+}
+.forecast-table strong { font-size: 17px; }
 .up { color: var(--red); font-weight: 950; }
 .down { color: var(--accent); font-weight: 950; }
 .flat { color: var(--green); font-weight: 950; }
-.reason-cell { min-width: 260px; font-size: 13px; line-height: 1.45; }
 .graph-list, .gallery { display: grid; gap: 8px; padding: 14px; }
 .graph-list { max-height: 640px; overflow: auto; }
 .graph-list button, .graph-row {
@@ -319,7 +380,7 @@ pre {
   .docs-sidebar { position: relative; height: auto; }
 }
 @media (max-width: 620px) {
-  .quick-actions, .metrics { grid-template-columns: 1fr; }
+  .quick-actions, .metrics, .fuel-summary { grid-template-columns: 1fr; }
   .section-head, .topbar { align-items: flex-start; flex-direction: column; }
   .row { grid-template-columns: 1fr; }
 }

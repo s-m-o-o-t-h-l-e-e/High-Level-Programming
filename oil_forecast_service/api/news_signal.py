@@ -1,6 +1,5 @@
 import json
 import math
-import os
 from datetime import datetime
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -99,35 +98,6 @@ def _fetch_google_news_articles() -> list[dict]:
     return rows
 
 
-def _load_aihub_news() -> list[dict]:
-    path = os.getenv("AIHUB_NEWS_CSV_PATH")
-    if not path:
-        return []
-    df = pd.read_csv(path)
-    title_col = next((col for col in df.columns if str(col).lower() in {"title", "제목", "headline"}), None)
-    date_col = next((col for col in df.columns if str(col).lower() in {"date", "일자", "published_at", "pubdate"}), None)
-    url_col = next((col for col in df.columns if str(col).lower() in {"url", "link"}), None)
-    if title_col is None:
-        raise ValueError("AIHUB_NEWS_CSV_PATH 파일에는 title/제목/headline 컬럼이 필요합니다.")
-    rows = []
-    for _, row in df.tail(500).iterrows():
-        title = str(row[title_col])
-        lowered = title.lower()
-        if not any(word in lowered for word in ["iran", "hormuz", "tehran", "oil", "crude", "이란", "호르무즈", "원유", "유가"]):
-            continue
-        rows.append(
-            {
-                "title": title,
-                "seendate": str(row[date_col]) if date_col else "",
-                "domain": "AI Hub",
-                "sourcecountry": "KR",
-                "url": str(row[url_col]) if url_col else "",
-                "source": "AI Hub news CSV",
-            }
-        )
-    return rows
-
-
 def _keyword_score(title: str, keywords: dict[str, float]) -> float:
     lowered = title.lower()
     return sum(weight for word, weight in keywords.items() if word in lowered)
@@ -186,16 +156,13 @@ def score_news_articles(articles: list[dict]) -> tuple[pd.DataFrame, dict]:
 
 
 def download_news_signal() -> dict:
-    print("뉴스/이벤트 분석: AI Hub 뉴스 + Google News 크롤링")
+    print("뉴스/이벤트 분석: Google News RSS + GDELT 실시간 뉴스")
     articles = []
-    aihub_articles = _load_aihub_news()
     google_articles = _fetch_google_news_articles()
-    articles.extend(aihub_articles)
     articles.extend(google_articles)
     if not articles:
         articles = _fetch_gdelt_articles()
     article_df, signal = score_news_articles(articles)
-    signal["aihub_article_count"] = len(aihub_articles)
     signal["google_news_article_count"] = len(google_articles)
     article_df.to_csv(PATHS.news_articles, index=False)
     pd.DataFrame([signal]).to_csv(PATHS.news_signal, index=False)

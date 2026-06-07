@@ -25,8 +25,11 @@ class Paths:
     model: Path = MODEL_DIR / "oil_project_lstm.keras"
     summary: Path = OUT_DIR / "analysis_summary.csv"
     forecast: Path = OUT_DIR / "seven_day_forecast.csv"
+    forecast_history: Path = OUT_DIR / "forecast_history.csv"
     event_windows: Path = OUT_DIR / "event_window_summary.csv"
+    event_risk_scores: Path = OUT_DIR / "event_risk_scores.csv"
     metrics: Path = OUT_DIR / "model_metrics.csv"
+    selected_model: Path = OUT_DIR / "selected_model.txt"
     figures: Path = OUT_DIR / "figures"
     refresh_state: Path = OUT_DIR / "refresh_state.csv"
 
@@ -34,10 +37,31 @@ class Paths:
 PATHS = Paths()
 
 EVENTS = [
-    ("2008-09-15", "글로벌 금융위기", 0.90),
-    ("2020-03-11", "코로나19 팬데믹", 1.00),
-    ("2022-02-24", "러시아-우크라이나 전쟁", 1.00),
-    ("2023-10-07", "중동 분쟁", 0.80),
+    (
+        "2008-09-15",
+        "글로벌 금융위기",
+        {"severity": 5, "oil_supply": 2, "region": 3, "duration": 5},
+    ),
+    (
+        "2020-03-11",
+        "코로나19 팬데믹",
+        {"severity": 5, "oil_supply": 3, "region": 5, "duration": 5},
+    ),
+    (
+        "2022-02-24",
+        "러시아-우크라이나 전쟁",
+        {"severity": 5, "oil_supply": 5, "region": 4, "duration": 5},
+    ),
+    (
+        "2023-10-07",
+        "중동 분쟁",
+        {"severity": 4, "oil_supply": 4, "region": 5, "duration": 4},
+    ),
+    (
+        "2026-06-05",
+        "이란-미국 긴장 및 호르무즈 봉쇄 리스크",
+        {"severity": 5, "oil_supply": 5, "region": 5, "duration": 4},
+    ),
 ]
 
 

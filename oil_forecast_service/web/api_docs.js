@@ -2,18 +2,18 @@ const endpoints = [
   {
     method: 'GET',
     path: '/summary',
-    title: '오늘 유가 요약',
-    desc: '국내 유가, WTI, Brent, 환율, 뉴스 리스크를 한 번에 확인합니다.',
-    output: 'latest, forecast, news, meta, sources',
+    title: '오늘 유종별 유가 요약',
+    desc: '휘발유, 경유, LPG, WTI, Brent, 환율, 뉴스 리스크를 한 번에 확인합니다.',
+    output: 'latest.gasoline_price, latest.diesel_price, latest.lpg_price, forecast, news, meta, sources',
     note: '페이지 진입 시 최신 산출물이 오래됐으면 자동 갱신을 시도합니다.'
   },
   {
     method: 'GET',
     path: '/forecast',
-    title: '7일 예측',
-    desc: '오늘 날짜 기준 향후 7일 예측 유가와 변화 이유를 확인합니다.',
-    output: 'date, predicted_domestic_price, reason',
-    note: 'reason은 실제 뉴스 제목, 환율, 국제유가 흐름을 함께 설명합니다.'
+    title: '유종별 7일 예측',
+    desc: '오늘 날짜 기준 향후 7일 휘발유, 경유, LPG 예측 유가를 확인합니다.',
+    output: 'date, prediction_time, predicted_gasoline_price, predicted_diesel_price, predicted_lpg_price',
+    note: '예측일, 예측 기준시각, 유종별 예측 유가를 JSON으로 확인합니다.'
   },
   {
     method: 'GET',
