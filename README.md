@@ -1,4 +1,4 @@
-# High-Level Programming Oil Forecast Service
+# High-Level Programming - Oil Forecast Service
 
 국내 휘발유·경유·LPG 평균가를 중심으로 WTI, Brent, 원/달러 환율, 뉴스 리스크를 함께 수집하고,
 LSTM 기반 7일 예측과 EDA 그래프를 로컬 웹 대시보드에서 확인하는 고급프로그래밍설계 팀 프로젝트입니다.
