@@ -1,0 +1,54 @@
+[2026-05-29 09:32:13] expanded Korean domestic oil news collection start
+[2026-05-29 09:32:14] success: fuel_tax_cut_policy / ??? ?? ??? ?? / 0 articles
+[2026-05-29 09:32:15] success: fuel_tax_cut_policy / ??? ?? ?? ?? / 0 articles
+[2026-05-29 09:32:17] success: fuel_tax_cut_policy / ??? ?? LPG ?? / 100 articles
+[2026-05-29 09:32:19] success: fuel_tax_cut_policy / ??? ?? ??? ?? / 0 articles
+[2026-05-29 09:32:21] success: fuel_tax_cut_policy / ??? ??? ?? ??? ?? / 0 articles
+[2026-05-29 09:32:22] success: truckers_strike_supply_risk / ???? ?? ??? / 0 articles
+[2026-05-29 09:32:24] success: truckers_strike_supply_risk / ???? ??? ??? / 0 articles
+[2026-05-29 09:32:25] success: truckers_strike_supply_risk / ???? ?? ?? ?? ?? / 0 articles
+[2026-05-29 09:32:27] success: truckers_strike_supply_risk / ???? ?? ?? ?? / 0 articles
+[2026-05-29 09:32:28] success: truckers_strike_supply_risk / ??? ?? ???? ?? ?? / 0 articles
+[2026-05-29 09:32:30] success: gas_station_supply_shortage / ??? ?? ??? / 0 articles
+[2026-05-29 09:32:32] success: gas_station_supply_shortage / ??? ?? ?? / 0 articles
+[2026-05-29 09:32:34] success: gas_station_supply_shortage / ??? ?? ?? / 0 articles
+[2026-05-29 09:32:35] success: gas_station_supply_shortage / ??? ?? ?? ?? / 0 articles
+[2026-05-29 09:32:39] success: refinery_labor_or_supply_risk / ??? ?? ?? ?? / 0 articles
+[2026-05-29 09:32:40] success: refinery_labor_or_supply_risk / ???? ?? ?? ?? / 0 articles
+[2026-05-29 09:32:42] success: refinery_labor_or_supply_risk / ???? ?? ??? / 0 articles
+[2026-05-29 09:32:43] success: refinery_labor_or_supply_risk / ??? ?? ?? ??? ?? / 0 articles
+[2026-05-29 09:32:45] success: urea_solution_crisis / ??? ?? ?? ?? / 0 articles
+[2026-05-29 09:32:46] success: urea_solution_crisis / ??? ?? ?? ?? / 0 articles
+[2026-05-29 09:32:47] success: urea_solution_crisis / ??? ?? ?? ?? / 0 articles
+[2026-05-29 09:32:49] success: domestic_price_surge / ?? ??? ?? ?? / 0 articles
+[2026-05-29 09:32:51] success: domestic_price_surge / ?? ?? ?? ?? / 0 articles
+[2026-05-29 09:32:53] success: domestic_price_surge / ?? ??? ??? ?? ??? / 0 articles
+[2026-05-29 09:32:54] success: domestic_price_decline / ?? ??? ?? ?? / 0 articles
+[2026-05-29 09:32:55] success: domestic_price_decline / ?? ?? ?? ?? / 0 articles
+[2026-05-29 09:32:57] success: domestic_price_decline / ?? ?? ?? ??? / 0 articles
+[2026-05-29 09:34:41] expanded Korean domestic oil news collection start
+[2026-05-29 09:34:42] success: fuel_tax_cut_policy / 유류세 인하 휘발유 가격 / 100 articles
+[2026-05-29 09:34:45] success: fuel_tax_cut_policy / 유류세 인하 경유 가격 / 100 articles
+[2026-05-29 09:34:47] success: fuel_tax_cut_policy / 유류세 인하 LPG 가격 / 43 articles
+[2026-05-29 09:34:48] success: fuel_tax_cut_policy / 유류세 환원 휘발유 가격 / 30 articles
+[2026-05-29 09:34:50] success: fuel_tax_cut_policy / 유류세 인하폭 축소 휘발유 경유 / 89 articles
+[2026-05-29 09:34:52] success: truckers_strike_supply_risk / 화물연대 파업 주유소 / 30 articles
+[2026-05-29 09:34:54] success: truckers_strike_supply_risk / 화물연대 총파업 정유사 / 10 articles
+[2026-05-29 09:34:55] success: truckers_strike_supply_risk / 화물연대 파업 유류 운송 차질 / 8 articles
+[2026-05-29 09:34:57] success: truckers_strike_supply_risk / 화물연대 파업 기름 공급 / 10 articles
+[2026-05-29 09:34:59] success: gas_station_supply_shortage / 주유소 품절 휘발유 / 37 articles
+[2026-05-29 09:35:01] success: gas_station_supply_shortage / 주유소 품절 경유 / 30 articles
+[2026-05-29 09:35:02] success: gas_station_supply_shortage / 주유소 기름 품절 / 37 articles
+[2026-05-29 09:35:04] success: gas_station_supply_shortage / 주유소 유류 공급 차질 / 51 articles
+[2026-05-29 09:35:06] success: refinery_labor_or_supply_risk / 정유사 파업 유류 공급 / 5 articles
+[2026-05-29 09:35:08] success: refinery_labor_or_supply_risk / 정유공장 파업 공급 차질 / 46 articles
+[2026-05-29 09:35:10] success: refinery_labor_or_supply_risk / 정유사 공급 차질 휘발유 경유 / 61 articles
+[2026-05-29 09:35:12] success: urea_solution_crisis / 요소수 대란 경유 차량 / 25 articles
+[2026-05-29 09:35:13] success: urea_solution_crisis / 요소수 대란 물류 경유 / 10 articles
+[2026-05-29 09:35:15] success: urea_solution_crisis / 요소수 품귀 물류 차질 / 10 articles
+[2026-05-29 09:35:17] success: domestic_price_surge / 국내 휘발유 가격 급등 / 100 articles
+[2026-05-29 09:35:20] success: domestic_price_surge / 국내 경유 가격 급등 / 100 articles
+[2026-05-29 09:35:22] success: domestic_price_surge / 전국 주유소 휘발유 경유 최고가 / 100 articles
+[2026-05-29 09:35:24] success: domestic_price_decline / 국내 휘발유 가격 하락 / 100 articles
+[2026-05-29 09:35:26] success: domestic_price_decline / 국내 경유 가격 하락 / 100 articles
+[2026-05-29 09:35:28] success: domestic_price_decline / 국내 유가 안정 휘발유 / 73 articles

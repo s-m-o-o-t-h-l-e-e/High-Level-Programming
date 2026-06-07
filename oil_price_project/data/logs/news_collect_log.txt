@@ -1,0 +1,89 @@
+[2026-05-28 22:18:22] news collection only pipeline start
+[2026-05-28 22:18:22] event start: global_financial_crisis (2008-06-01 ~ 2009-06-30)
+[2026-05-28 22:18:28] query fail: global_financial_crisis / financial crisis oil price / Expecting value: line 1 column 1 (char 0)
+[2026-05-28 22:18:40] query fail: global_financial_crisis / global financial crisis crude oil / Expecting value: line 1 column 1 (char 0)
+[2026-05-28 22:18:44] event start: covid19_pandemic (2020-01-01 ~ 2022-12-31)
+[2026-05-28 22:18:50] query fail: covid19_pandemic / COVID oil price / HTTP Error 429: Too Many Requests
+[2026-05-28 22:19:01] query fail: covid19_pandemic / pandemic oil demand / HTTP Error 429: Too Many Requests
+[2026-05-28 22:19:11] query fail: covid19_pandemic / coronavirus crude oil / HTTP Error 429: Too Many Requests
+[2026-05-28 22:19:15] event start: russia_ukraine_war (2021-11-01 ~ 2022-12-31)
+[2026-05-28 22:19:29] query fail: russia_ukraine_war / Russia Ukraine war oil price / HTTP Error 429: Too Many Requests
+[2026-05-28 22:19:45] query success: russia_ukraine_war / Ukraine war crude oil / 75 articles
+[2026-05-28 22:19:56] query fail: russia_ukraine_war / Russia sanctions oil / HTTP Error 429: Too Many Requests
+[2026-05-28 22:20:00] event start: israel_hamas_middle_east_conflict (2023-07-01 ~ 2024-06-30)
+[2026-05-28 22:20:21] query fail: israel_hamas_middle_east_conflict / Israel Hamas oil price / <urlopen error [WinError 10060] 연결된 구성원으로부터 응답이 없어 연결하지 못했거나, 호스트로부터 응답이 없어 연결이 끊어졌습니다>
+[2026-05-28 22:20:46] query fail: israel_hamas_middle_east_conflict / Middle East conflict oil / <urlopen error [WinError 10060] 연결된 구성원으로부터 응답이 없어 연결하지 못했거나, 호스트로부터 응답이 없어 연결이 끊어졌습니다>
+[2026-05-28 22:20:59] query fail: israel_hamas_middle_east_conflict / Iran oil price / HTTP Error 429: Too Many Requests
+[2026-05-28 22:21:09] query fail: israel_hamas_middle_east_conflict / Strait of Hormuz oil / HTTP Error 429: Too Many Requests
+[2026-05-28 22:21:13] event start: recent_middle_east_oil_risk (2024-01-01 ~ 2026-05-28)
+[2026-05-28 22:21:25] query fail: recent_middle_east_oil_risk / Middle East oil price / HTTP Error 429: Too Many Requests
+[2026-05-28 22:21:51] query fail: recent_middle_east_oil_risk / Iran oil price / HTTP Error 429: Too Many Requests
+[2026-05-28 22:22:02] query fail: recent_middle_east_oil_risk / Strait of Hormuz oil / HTTP Error 429: Too Many Requests
+[2026-05-28 22:22:12] query fail: recent_middle_east_oil_risk / OPEC oil price / HTTP Error 429: Too Many Requests
+[2026-05-28 22:22:28] query fail: recent_middle_east_oil_risk / Korea gasoline price / HTTP Error 429: Too Many Requests
+[2026-05-28 22:22:32] saved collected news: C:\Users\ksh62\OneDrive\Desktop\oil_price_project\data\raw\news\news_collected_all.csv
+[2026-05-28 22:22:32] saved relevant news rows: 75
+[2026-05-28 22:22:32] saved irrelevant news rows: 0
+[2026-05-28 22:22:32] saved news risk index: C:\Users\ksh62\OneDrive\Desktop\oil_price_project\data\processed\news_risk_index.csv
+[2026-05-28 22:22:32] total collected rows after dedup: 75
+[2026-05-28 22:22:32] risk index rows: 38
+[2026-05-28 22:22:32] news collection only pipeline finished
+[2026-05-28 22:26:24] news collection only pipeline start
+[2026-05-28 22:26:24] source: Google News RSS historical search
+[2026-05-28 22:26:24] event start: global_financial_crisis (2008-06-01 ~ 2009-06-30)
+[2026-05-28 22:26:25] query success: global_financial_crisis / financial crisis oil price / 43 articles
+[2026-05-28 22:26:27] query success: global_financial_crisis / global financial crisis crude oil / 31 articles
+[2026-05-28 22:26:29] query success: global_financial_crisis / oil price collapse 2008 / 43 articles
+[2026-05-28 22:26:30] event start: covid19_pandemic (2020-01-01 ~ 2022-12-31)
+[2026-05-28 22:26:31] query success: covid19_pandemic / COVID oil price / 100 articles
+[2026-05-28 22:26:33] query success: covid19_pandemic / pandemic oil demand / 100 articles
+[2026-05-28 22:26:35] query success: covid19_pandemic / coronavirus crude oil / 53 articles
+[2026-05-28 22:26:38] query success: covid19_pandemic / COVID gasoline price / 100 articles
+[2026-05-28 22:26:39] event start: russia_ukraine_war (2021-11-01 ~ 2022-12-31)
+[2026-05-28 22:26:40] query success: russia_ukraine_war / Russia Ukraine war oil price / 100 articles
+[2026-05-28 22:26:42] query success: russia_ukraine_war / Ukraine war crude oil / 100 articles
+[2026-05-28 22:26:45] query success: russia_ukraine_war / Russia sanctions oil / 100 articles
+[2026-05-28 22:26:48] query success: russia_ukraine_war / Europe energy crisis oil / 87 articles
+[2026-05-28 22:26:50] event start: israel_hamas_middle_east_conflict (2023-07-01 ~ 2024-06-30)
+[2026-05-28 22:26:50] query success: israel_hamas_middle_east_conflict / Israel Hamas oil price / 100 articles
+[2026-05-28 22:26:53] query success: israel_hamas_middle_east_conflict / Middle East conflict oil / 100 articles
+[2026-05-28 22:26:55] query success: israel_hamas_middle_east_conflict / Iran oil price / 100 articles
+[2026-05-28 22:26:58] query success: israel_hamas_middle_east_conflict / Strait of Hormuz oil / 76 articles
+[2026-05-28 22:27:00] event start: recent_middle_east_oil_risk (2024-01-01 ~ 2026-05-28)
+[2026-05-28 22:27:01] query success: recent_middle_east_oil_risk / Middle East oil price / 100 articles
+[2026-05-28 22:27:03] query success: recent_middle_east_oil_risk / Iran oil price / 100 articles
+[2026-05-28 22:27:06] query success: recent_middle_east_oil_risk / Strait of Hormuz oil / 100 articles
+[2026-05-28 22:27:08] query success: recent_middle_east_oil_risk / OPEC oil price / 100 articles
+[2026-05-28 22:27:11] query success: recent_middle_east_oil_risk / Korea gasoline price / 100 articles
+[2026-05-28 22:28:09] news collection only pipeline start
+[2026-05-28 22:28:09] source: Google News RSS historical search
+[2026-05-28 22:28:09] event start: global_financial_crisis (2008-06-01 ~ 2009-06-30)
+[2026-05-28 22:28:10] query success: global_financial_crisis / financial crisis oil price / 43 articles
+[2026-05-28 22:28:12] query success: global_financial_crisis / global financial crisis crude oil / 31 articles
+[2026-05-28 22:28:14] query success: global_financial_crisis / oil price collapse 2008 / 43 articles
+[2026-05-28 22:28:15] event start: covid19_pandemic (2020-01-01 ~ 2022-12-31)
+[2026-05-28 22:28:16] query success: covid19_pandemic / COVID oil price / 100 articles
+[2026-05-28 22:28:18] query success: covid19_pandemic / pandemic oil demand / 100 articles
+[2026-05-28 22:28:21] query success: covid19_pandemic / coronavirus crude oil / 53 articles
+[2026-05-28 22:28:23] query success: covid19_pandemic / COVID gasoline price / 100 articles
+[2026-05-28 22:28:24] event start: russia_ukraine_war (2021-11-01 ~ 2022-12-31)
+[2026-05-28 22:28:25] query success: russia_ukraine_war / Russia Ukraine war oil price / 100 articles
+[2026-05-28 22:28:28] query success: russia_ukraine_war / Ukraine war crude oil / 100 articles
+[2026-05-28 22:28:30] query success: russia_ukraine_war / Russia sanctions oil / 100 articles
+[2026-05-28 22:28:32] query success: russia_ukraine_war / Europe energy crisis oil / 87 articles
+[2026-05-28 22:28:34] event start: israel_hamas_middle_east_conflict (2023-07-01 ~ 2024-06-30)
+[2026-05-28 22:28:35] query success: israel_hamas_middle_east_conflict / Israel Hamas oil price / 100 articles
+[2026-05-28 22:28:37] query success: israel_hamas_middle_east_conflict / Middle East conflict oil / 100 articles
+[2026-05-28 22:28:39] query success: israel_hamas_middle_east_conflict / Iran oil price / 100 articles
+[2026-05-28 22:28:41] query success: israel_hamas_middle_east_conflict / Strait of Hormuz oil / 76 articles
+[2026-05-28 22:28:43] event start: recent_middle_east_oil_risk (2024-01-01 ~ 2026-05-28)
+[2026-05-28 22:28:44] query success: recent_middle_east_oil_risk / Middle East oil price / 100 articles
+[2026-05-28 22:28:46] query success: recent_middle_east_oil_risk / Iran oil price / 100 articles
+[2026-05-28 22:28:49] query success: recent_middle_east_oil_risk / Strait of Hormuz oil / 100 articles
+[2026-05-28 22:28:51] query success: recent_middle_east_oil_risk / OPEC oil price / 100 articles
+[2026-05-28 22:28:53] query success: recent_middle_east_oil_risk / Korea gasoline price / 100 articles
+[2026-05-28 22:28:55] saved total news rows: 1521
+[2026-05-28 22:28:55] saved relevant news rows: 1517
+[2026-05-28 22:28:55] saved irrelevant news rows: 4
+[2026-05-28 22:28:55] saved risk index rows: 686
+[2026-05-28 22:28:55] news collection only pipeline finished
